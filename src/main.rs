@@ -4,16 +4,23 @@ use syntax::{Expression, Program, Statement, Token, TokenType};
 #[derive(Debug)]
 enum InterpreterError {
     CouldNotReadFile(String),
-    OutOfScopes,
 }
 #[derive(Debug)]
 enum RuntimeError {
     UndefinedVariable(String),
+    OutOfScopes,
 }
 
 #[derive(Debug)]
 enum Value {
     Number(f64),
+}
+impl Value {
+    fn is_truthy(&self) -> bool {
+        match self {
+            Value::Number(n) => *n > 0.0,
+        }
+    }
 }
 
 struct Environment {
@@ -28,10 +35,10 @@ impl Environment {
         self.scopes.pop();
     }
 
-    fn define(&mut self, name: String, value: Value) -> Result<(), InterpreterError> {
+    fn define(&mut self, name: String, value: Value) -> Result<(), RuntimeError> {
         self.scopes
             .last_mut()
-            .ok_or(InterpreterError::OutOfScopes)?
+            .ok_or(RuntimeError::OutOfScopes)?
             .insert(name, value);
         Ok(())
     }
@@ -65,16 +72,13 @@ fn main() {
                 InterpreterError::CouldNotReadFile(s) => {
                     println!("Error reading file: {}", s);
                 }
-                InterpreterError::OutOfScopes => {
-                    println!("Interpreter ran out of scopes.");
-                }
             }
             std::process::exit(1);
         }
     };
     let mut environment = Environment { scopes: Vec::new() };
     environment.push_scope();
-    match execute_program(&program, &environment) {
+    match execute_program(&program, &mut environment) {
         Ok(_) => {
             println!("Program executed!");
             println!("Global variables: ");
@@ -103,7 +107,10 @@ fn execute_program(program: &Program, environment: &mut Environment) -> Result<(
     }
     Ok(())
 }
-fn execute_block(block: Vec<Statement>, environment: &mut Environment) -> Result<(), RuntimeError> {
+fn execute_block(
+    block: &Vec<Statement>,
+    environment: &mut Environment,
+) -> Result<(), RuntimeError> {
     environment.push_scope();
 
     for statement in block {
@@ -118,6 +125,42 @@ fn execute_statement(
     statement: &Statement,
     environment: &mut Environment,
 ) -> Result<(), RuntimeError> {
+    match statement {
+        Statement::Let {
+            identifier,
+            expression,
+        } => {
+            environment.define(
+                identifier.clone(),
+                evaluate_expression(&expression, &environment)?,
+            )?;
+        }
+        Statement::Assignment {
+            identifier,
+            expression,
+        } => {
+            environment.assign(identifier, evaluate_expression(expression, environment)?)?;
+        }
+        Statement::If { condition, body } => {
+            if evaluate_expression(condition, environment)?.is_truthy() {
+                execute_block(body, environment)?;
+            }
+        }
+        Statement::Else { body } => todo!(),
+        Statement::While { condition, body } => todo!(),
+        Statement::For {
+            initialiser,
+            condition,
+            increment,
+            body,
+        } => todo!(),
+        Statement::ExpressionStatement { expression } => {
+            evaluate_expression(expression, environment)?;
+        }
+        Statement::Pass => (),
+        _ => (),
+    }
+
     Ok(())
 }
 
