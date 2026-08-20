@@ -146,19 +146,44 @@ fn execute_statement(
                 execute_block(body, environment)?;
             }
         }
-        Statement::Else { body } => todo!(),
-        Statement::While { condition, body } => todo!(),
+        Statement::Else { body } => {
+            // TODO: Figure out if last statement was an if that evaluated to false
+            execute_block(body, environment)?;
+        }
+        Statement::While { condition, body } => {
+            while evaluate_expression(condition, environment)?.is_truthy() {
+                execute_block(body, environment)?;
+            }
+        }
         Statement::For {
             initialiser,
             condition,
             increment,
             body,
-        } => todo!(),
+        } => {
+            environment.push_scope();
+            if let Some(init) = initialiser {
+                execute_statement(init, environment)?;
+            }
+            loop {
+                if let Some(condition) = condition {
+                    if !evaluate_expression(condition, environment)?.is_truthy() {
+                        break;
+                    }
+                }
+
+                execute_block(body, environment)?;
+
+                if let Some(increment) = increment {
+                    execute_statement(increment, environment)?
+                };
+            }
+            environment.pop_scope();
+        }
         Statement::ExpressionStatement { expression } => {
             evaluate_expression(expression, environment)?;
         }
         Statement::Pass => (),
-        _ => (),
     }
 
     Ok(())
@@ -168,5 +193,6 @@ fn evaluate_expression(
     expression: &Expression,
     environment: &Environment,
 ) -> Result<Value, RuntimeError> {
+    // TODO: implement expression evaluation (walk AST)
     Ok(Value::Number(0.0))
 }
