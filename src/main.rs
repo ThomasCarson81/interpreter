@@ -142,14 +142,16 @@ fn execute_statement(
         } => {
             environment.assign(identifier, evaluate_expression(expression, environment)?)?;
         }
-        Statement::If { condition, body } => {
+        Statement::If {
+            condition,
+            body,
+            else_block,
+        } => {
             if evaluate_expression(condition, environment)?.is_truthy() {
                 execute_block(body, environment)?;
+            } else if let Some(else_block) = else_block {
+                execute_block(else_block, environment)?;
             }
-        }
-        Statement::Else { body } => {
-            // TODO: Figure out if last statement was an if that evaluated to false
-            execute_block(body, environment)?;
         }
         Statement::While { condition, body } => {
             while evaluate_expression(condition, environment)?.is_truthy() {
