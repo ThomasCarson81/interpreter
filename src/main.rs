@@ -242,6 +242,8 @@ fn evaluate_binary_operator(
         TokenType::LessThanOrEqualTo => evaluate_less_than_or_equal_to(left, right),
         TokenType::EqualTo => evaluate_equal_to(left, right),
         TokenType::NotEqualTo => evaluate_not_equal_to(left, right),
+        TokenType::LogicalOr => evaluate_logical_or(left, right),
+        TokenType::LogicalAnd => evaluate_logical_and(left, right),
         _ => Err(RuntimeError::UnknownOperator(*operator)),
     }
 }
@@ -392,6 +394,38 @@ fn evaluate_not_equal_to(left: Value, right: Value) -> Result<Value, RuntimeErro
     }
 }
 
+fn evaluate_logical_and(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(_), Value::Number(_)) => {
+            if left.is_truthy() && right.is_truthy() {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::NotEqualTo,
+            right,
+        )),
+    }
+}
+
+fn evaluate_logical_or(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(_), Value::Number(_)) => {
+            if left.is_truthy() || right.is_truthy() {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::NotEqualTo,
+            right,
+        )),
+    }
+}
+
 fn evaluate_increment(
     operand: &Expression,
     environment: &mut Environment,
@@ -441,7 +475,7 @@ fn evaluate_decrement(
 }
 
 fn evaluate_not_operator(operand: &Value) -> Result<Value, RuntimeError> {
-    if operand.is_truthy() {
+    if !operand.is_truthy() {
         Ok(Value::Number(1.0))
     } else {
         Ok(Value::Number(0.0))
