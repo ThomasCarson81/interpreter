@@ -257,6 +257,7 @@ fn evaluate_unary_operator(
         TokenType::Increment => evaluate_increment(operand, environment),
         TokenType::Decrement => evaluate_decrement(operand, environment),
         TokenType::Not => evaluate_not_operator(&evaluate_expression(operand, environment)?),
+        TokenType::Minus => evaluate_unary_minus(&evaluate_expression(operand, environment)?),
         _ => Err(RuntimeError::UnknownOperator(*operator)),
     }
 }
@@ -479,5 +480,14 @@ fn evaluate_not_operator(operand: &Value) -> Result<Value, RuntimeError> {
         Ok(Value::Number(1.0))
     } else {
         Ok(Value::Number(0.0))
+    }
+}
+
+fn evaluate_unary_minus(operand: &Value) -> Result<Value, RuntimeError> {
+    match operand {
+        Value::Number(num) => Ok(Value::Number(-num)),
+        _ => Err(RuntimeError::TypeError(String::from(
+            "operator: '-' is only compatible with numbers.",
+        ))),
     }
 }
