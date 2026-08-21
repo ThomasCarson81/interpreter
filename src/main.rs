@@ -1,5 +1,5 @@
 use std::{collections::HashMap, env};
-use syntax::{Expression, Program, Statement, Token, TokenType};
+use syntax::{Expression, Program, Statement, TokenType};
 
 #[derive(Debug)]
 enum InterpreterError {
@@ -9,6 +9,10 @@ enum InterpreterError {
 enum RuntimeError {
     UndefinedVariable(String),
     OutOfScopes,
+    TypeError(String),
+    BinOpTypeError(Value, TokenType, Value),
+    UnknownOperator(TokenType),
+    DivideByZero,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +95,13 @@ fn main() {
         Err(e) => match e {
             RuntimeError::UndefinedVariable(v) => println!("Undefined variable: {v}"),
             RuntimeError::OutOfScopes => println!("Interpreter ran out of scopes."),
+            RuntimeError::TypeError(msg) => println!("TypeError: {msg}"),
+            RuntimeError::BinOpTypeError(left, op, right) => println!(
+                "TypeError: operator: '{op}' is incompatible between types '{:?}' and '{:?}'",
+                left, right
+            ),
+            RuntimeError::UnknownOperator(op) => println!("Unknown operator: {op}"),
+            RuntimeError::DivideByZero => println!("Cannot divide by zero."),
         },
     }
 }
@@ -131,16 +142,15 @@ fn execute_statement(
             identifier,
             expression,
         } => {
-            environment.define(
-                identifier.clone(),
-                evaluate_expression(&expression, &environment)?,
-            )?;
+            let val = evaluate_expression(&expression, environment)?;
+            environment.define(identifier.clone(), val)?;
         }
         Statement::Assignment {
             identifier,
             expression,
         } => {
-            environment.assign(identifier, evaluate_expression(expression, environment)?)?;
+            let val = evaluate_expression(expression, environment)?;
+            environment.assign(identifier, val)?;
         }
         Statement::If {
             condition,
@@ -194,7 +204,7 @@ fn execute_statement(
 
 fn evaluate_expression(
     expression: &Expression,
-    environment: &Environment,
+    environment: &mut Environment,
 ) -> Result<Value, RuntimeError> {
     match expression {
         Expression::Number(num) => Ok(Value::Number(*num)),
@@ -212,9 +222,7 @@ fn evaluate_expression(
             evaluate_binary_operator(left, operator, right)
         }
         Expression::UnaryOp { operator, operand } => {
-            let value = evaluate_expression(operand, environment)?;
-
-            evaluate_unary_operator(value, operator)
+            evaluate_unary_operator(operand, operator, environment)
         }
     }
 }
@@ -223,8 +231,219 @@ fn evaluate_binary_operator(
     operator: &TokenType,
     right: Value,
 ) -> Result<Value, RuntimeError> {
-    Ok(Value::Number(0.0))
+    match operator {
+        TokenType::Plus => evaluate_plus(left, right),
+        TokenType::Minus => evaluate_minus(left, right),
+        TokenType::Asterisk => evaluate_multiply(left, right),
+        TokenType::Slash => evaluate_divide(left, right),
+        TokenType::GreaterThan => evaluate_greater_than(left, right),
+        TokenType::LessThan => evaluate_less_than(left, right),
+        TokenType::GreaterThanOrEqualTo => evaluate_greater_than_or_equal_to(left, right),
+        TokenType::LessThanOrEqualTo => evaluate_less_than_or_equal_to(left, right),
+        TokenType::EqualTo => evaluate_equal_to(left, right),
+        TokenType::NotEqualTo => evaluate_not_equal_to(left, right),
+        _ => Err(RuntimeError::UnknownOperator(*operator)),
+    }
 }
-fn evaluate_unary_operator(operand: Value, operator: &TokenType) -> Result<Value, RuntimeError> {
-    Ok(Value::Number(0.0))
+
+fn evaluate_unary_operator(
+    operand: &Expression,
+    operator: &TokenType,
+    environment: &mut Environment,
+) -> Result<Value, RuntimeError> {
+    match operator {
+        TokenType::Increment => evaluate_increment(operand, environment),
+        TokenType::Decrement => evaluate_decrement(operand, environment),
+        TokenType::Not => evaluate_not_operator(&evaluate_expression(operand, environment)?),
+        _ => Err(RuntimeError::UnknownOperator(*operator)),
+    }
+}
+
+fn evaluate_plus(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Number(left + right)),
+        _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Plus, right)),
+    }
+}
+
+fn evaluate_minus(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Number(left - right)),
+        _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Minus, right)),
+    }
+}
+
+fn evaluate_multiply(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Number(left * right)),
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::Asterisk,
+            right,
+        )),
+    }
+}
+
+fn evaluate_divide(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            if *right == 0.0 {
+                return Err(RuntimeError::DivideByZero);
+            }
+            Ok(Value::Number(left / right))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Slash, right)),
+    }
+}
+
+fn evaluate_greater_than(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            if left > right {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::GreaterThan,
+            right,
+        )),
+    }
+}
+
+fn evaluate_greater_than_or_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            if left >= right {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::GreaterThanOrEqualTo,
+            right,
+        )),
+    }
+}
+
+fn evaluate_less_than(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            if left < right {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::LessThan,
+            right,
+        )),
+    }
+}
+
+fn evaluate_less_than_or_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            if left <= right {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::LessThanOrEqualTo,
+            right,
+        )),
+    }
+}
+
+fn evaluate_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            if left == right {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::EqualTo,
+            right,
+        )),
+    }
+}
+
+fn evaluate_not_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            if left != right {
+                return Ok(Value::Number(1.0));
+            }
+            Ok(Value::Number(0.0))
+        }
+        _ => Err(RuntimeError::BinOpTypeError(
+            left,
+            TokenType::NotEqualTo,
+            right,
+        )),
+    }
+}
+
+fn evaluate_increment(
+    operand: &Expression,
+    environment: &mut Environment,
+) -> Result<Value, RuntimeError> {
+    match operand {
+        Expression::Identifier(name) => {
+            let num = environment
+                .get(name)
+                .ok_or(RuntimeError::UndefinedVariable(name.clone()))?;
+            let Value::Number(n) = num else {
+                return Err(RuntimeError::TypeError(String::from(
+                    "operator: '++' is only compatible with numbers.",
+                )));
+            };
+            let new_num = Value::Number(n + 1.0);
+            environment.assign(name, new_num.clone())?;
+            Ok(new_num)
+        }
+        _ => Err(RuntimeError::TypeError(String::from(
+            "operator: '++' is only compatible with numbers.",
+        ))),
+    }
+}
+
+fn evaluate_decrement(
+    operand: &Expression,
+    environment: &mut Environment,
+) -> Result<Value, RuntimeError> {
+    match operand {
+        Expression::Identifier(name) => {
+            let num = environment
+                .get(name)
+                .ok_or(RuntimeError::UndefinedVariable(name.clone()))?;
+            let Value::Number(n) = num else {
+                return Err(RuntimeError::TypeError(String::from(
+                    "operator: '--' is only compatible with numbers.",
+                )));
+            };
+            let new_num = Value::Number(n - 1.0);
+            environment.assign(name, new_num.clone())?;
+            Ok(new_num)
+        }
+        _ => Err(RuntimeError::TypeError(String::from(
+            "operator: '--' is only compatible with numbers.",
+        ))),
+    }
+}
+
+fn evaluate_not_operator(operand: &Value) -> Result<Value, RuntimeError> {
+    if operand.is_truthy() {
+        Ok(Value::Number(1.0))
+    } else {
+        Ok(Value::Number(0.0))
+    }
 }
