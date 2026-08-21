@@ -88,9 +88,10 @@ fn main() {
                 }
             }
         }
-        Err(e) => {
-            println!("Runtime Error: {:?}", e)
-        }
+        Err(e) => match e {
+            RuntimeError::UndefinedVariable(v) => println!("Undefined variable: {v}"),
+            RuntimeError::OutOfScopes => println!("Interpreter ran out of scopes."),
+        },
     }
 }
 fn get_ast_from_file(file_path: &str) -> Result<Program, InterpreterError> {
