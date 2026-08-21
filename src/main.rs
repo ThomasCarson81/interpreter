@@ -11,7 +11,7 @@ enum RuntimeError {
     OutOfScopes,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Value {
     Number(f64),
 }
@@ -196,6 +196,35 @@ fn evaluate_expression(
     expression: &Expression,
     environment: &Environment,
 ) -> Result<Value, RuntimeError> {
-    // TODO: implement expression evaluation (walk AST)
+    match expression {
+        Expression::Number(num) => Ok(Value::Number(*num)),
+        Expression::Identifier(name) => environment
+            .get(name)
+            .cloned()
+            .ok_or(RuntimeError::UndefinedVariable(name.clone())),
+        Expression::BinaryOp {
+            left,
+            operator,
+            right,
+        } => {
+            let left = evaluate_expression(left, environment)?;
+            let right = evaluate_expression(right, environment)?;
+            evaluate_binary_operator(left, operator, right)
+        }
+        Expression::UnaryOp { operator, operand } => {
+            let value = evaluate_expression(operand, environment)?;
+
+            evaluate_unary_operator(value, operator)
+        }
+    }
+}
+fn evaluate_binary_operator(
+    left: Value,
+    operator: &TokenType,
+    right: Value,
+) -> Result<Value, RuntimeError> {
+    Ok(Value::Number(0.0))
+}
+fn evaluate_unary_operator(operand: Value, operator: &TokenType) -> Result<Value, RuntimeError> {
     Ok(Value::Number(0.0))
 }
