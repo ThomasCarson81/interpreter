@@ -405,7 +405,7 @@ fn evaluate_logical_and(left: Value, right: Value) -> Result<Value, RuntimeError
         }
         _ => Err(RuntimeError::BinOpTypeError(
             left,
-            TokenType::NotEqualTo,
+            TokenType::LogicalAnd,
             right,
         )),
     }
@@ -421,7 +421,7 @@ fn evaluate_logical_or(left: Value, right: Value) -> Result<Value, RuntimeError>
         }
         _ => Err(RuntimeError::BinOpTypeError(
             left,
-            TokenType::NotEqualTo,
+            TokenType::LogicalOr,
             right,
         )),
     }
