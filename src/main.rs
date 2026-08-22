@@ -8,27 +8,64 @@ enum InterpreterError {
 #[derive(Debug)]
 enum RuntimeError {
     UndefinedVariable(String),
+    UndefinedFunction(String),
     OutOfScopes,
     TypeError(String),
     BinOpTypeError(Value, TokenType, Value),
     UnknownOperator(TokenType),
     DivideByZero,
+    ArgumentCountMismatch(String, usize, usize),
 }
 
 #[derive(Debug, Clone)]
 enum Value {
     Number(f64),
+    Unit,
 }
 impl Value {
     fn is_truthy(&self) -> bool {
         match self {
             Value::Number(n) => *n > 0.0,
+            Value::Unit => false,
         }
+    }
+}
+#[derive(Clone)]
+struct Function {
+    name: String,
+    parameters: Vec<String>,
+    body: Vec<Statement>,
+    // return type?
+}
+impl Function {
+    fn call(
+        &self,
+        arguments: Vec<Value>,
+        environment: &mut Environment,
+    ) -> Result<Value, RuntimeError> {
+        let num_params = self.parameters.len();
+        let num_args = arguments.len();
+        if num_params != num_args {
+            return Err(RuntimeError::ArgumentCountMismatch(
+                self.name.clone(),
+                num_params,
+                num_args,
+            ));
+        }
+        environment.push_scope();
+        for kv in self.parameters.iter().zip(arguments) {
+            environment.define(kv.0.clone(), kv.1.clone())?;
+        }
+        execute_block(&self.body, environment)?;
+        environment.pop_scope();
+        // return
+        Ok(Value::Unit)
     }
 }
 
 struct Environment {
     scopes: Vec<HashMap<String, Value>>,
+    functions: HashMap<String, Function>,
 }
 impl Environment {
     fn push_scope(&mut self) {
@@ -60,6 +97,19 @@ impl Environment {
         }
         Err(RuntimeError::UndefinedVariable(name.to_string()))
     }
+
+    fn define_func(&mut self, name: String, value: Function) {
+        self.functions.insert(name, value);
+    }
+
+    fn call_func(&mut self, name: String, arguments: Vec<Value>) -> Result<Value, RuntimeError> {
+        let func = self
+            .functions
+            .get(&name)
+            .cloned()
+            .ok_or(RuntimeError::UndefinedFunction(name))?;
+        func.call(arguments, self)
+    }
 }
 
 fn main() {
@@ -80,7 +130,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let mut environment = Environment { scopes: Vec::new() };
+    let mut environment = Environment {
+        scopes: Vec::new(),
+        functions: HashMap::new(),
+    };
     environment.push_scope();
     match execute_program(&program, &mut environment) {
         Ok(_) => {
@@ -94,6 +147,7 @@ fn main() {
         }
         Err(e) => match e {
             RuntimeError::UndefinedVariable(v) => println!("Undefined variable: {v}"),
+            RuntimeError::UndefinedFunction(f) => println!("Undefined function: {f}"),
             RuntimeError::OutOfScopes => println!("Interpreter ran out of scopes."),
             RuntimeError::TypeError(msg) => println!("TypeError: {msg}"),
             RuntimeError::BinOpTypeError(left, op, right) => println!(
@@ -102,6 +156,9 @@ fn main() {
             ),
             RuntimeError::UnknownOperator(op) => println!("Unknown operator: {op}"),
             RuntimeError::DivideByZero => println!("Cannot divide by zero."),
+            RuntimeError::ArgumentCountMismatch(name, num_param, num_arg) => println!(
+                "Error: Function '{name}' takes {num_param} arguments, but '{num_arg}' were provided."
+            ),
         },
     }
 }
@@ -193,6 +250,18 @@ fn execute_statement(
             }
             environment.pop_scope();
         }
+        Statement::FunctionDefinition {
+            identifier,
+            parameters,
+            body,
+        } => {
+            let func = Function {
+                name: identifier.clone(),
+                parameters: parameters.clone(),
+                body: body.clone(),
+            };
+            environment.define_func(identifier.clone(), func);
+        }
         Statement::ExpressionStatement { expression } => {
             evaluate_expression(expression, environment)?;
         }
@@ -223,6 +292,16 @@ fn evaluate_expression(
         }
         Expression::UnaryOp { operator, operand } => {
             evaluate_unary_operator(operand, operator, environment)
+        }
+        Expression::FunctionCall {
+            identifier,
+            arguments,
+        } => {
+            let args = arguments
+                .iter()
+                .map(|arg| evaluate_expression(arg, environment))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(environment.call_func(identifier.clone(), args)?)
         }
     }
 }
