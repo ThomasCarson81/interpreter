@@ -40,12 +40,19 @@ enum ControlFlow {
     Continue,
 }
 
+type BuiltInFunction = fn(Vec<Value>, &mut Environment) -> Result<Value, RuntimeError>;
+
 #[derive(Clone)]
-struct Function {
-    name: String,
-    parameters: Vec<String>,
-    body: Vec<Statement>,
-    // return type?
+enum Function {
+    UserDefined {
+        name: String,
+        parameters: Vec<String>,
+        body: Vec<Statement>,
+    },
+    BuiltIn {
+        name: String,
+        function: BuiltInFunction,
+    },
 }
 impl Function {
     fn call(
@@ -53,36 +60,45 @@ impl Function {
         arguments: Vec<Value>,
         environment: &mut Environment,
     ) -> Result<Value, RuntimeError> {
-        let num_params = self.parameters.len();
-        let num_args = arguments.len();
-        if num_params != num_args {
-            return Err(RuntimeError::ArgumentCountMismatch(
-                self.name.clone(),
-                num_params,
-                num_args,
-            ));
-        }
-        environment.push_scope();
-        for kv in self.parameters.iter().zip(arguments) {
-            environment.define(kv.0.clone(), kv.1.clone())?;
-        }
-        match execute_block(&self.body, environment)? {
-            ControlFlow::Normal => {}
-            ControlFlow::Return(value) => {
+        match self {
+            Function::UserDefined {
+                name,
+                parameters,
+                body,
+            } => {
+                let num_params = parameters.len();
+                let num_args = arguments.len();
+                if num_params != num_args {
+                    return Err(RuntimeError::ArgumentCountMismatch(
+                        name.clone(),
+                        num_params,
+                        num_args,
+                    ));
+                }
+                environment.push_scope();
+                for (parameter, argument) in parameters.iter().zip(arguments) {
+                    environment.define(parameter.clone(), argument)?;
+                }
+                match execute_block(&body, environment)? {
+                    ControlFlow::Normal => {}
+                    ControlFlow::Return(value) => {
+                        environment.pop_scope();
+                        return Ok(value);
+                    }
+                    ControlFlow::Break => {
+                        environment.pop_scope();
+                        return Err(RuntimeError::IllegalControlFlow(ControlFlow::Break));
+                    }
+                    ControlFlow::Continue => {
+                        environment.pop_scope();
+                        return Err(RuntimeError::IllegalControlFlow(ControlFlow::Continue));
+                    }
+                }
                 environment.pop_scope();
-                return Ok(value);
+                Ok(Value::Unit)
             }
-            ControlFlow::Break => {
-                environment.pop_scope();
-                return Err(RuntimeError::IllegalControlFlow(ControlFlow::Break));
-            }
-            ControlFlow::Continue => {
-                environment.pop_scope();
-                return Err(RuntimeError::IllegalControlFlow(ControlFlow::Continue));
-            }
+            Function::BuiltIn { function, .. } => function(arguments, environment),
         }
-        environment.pop_scope();
-        Ok(Value::Unit)
     }
 }
 
@@ -123,6 +139,11 @@ impl Environment {
 
     fn define_func(&mut self, name: String, value: Function) {
         self.functions.insert(name, value);
+    }
+
+    fn define_builtin_func(&mut self, name: String, function: BuiltInFunction) {
+        self.functions
+            .insert(name.clone(), Function::BuiltIn { name, function });
     }
 
     fn call_func(&mut self, name: String, arguments: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -307,7 +328,7 @@ fn execute_statement(
             parameters,
             body,
         } => {
-            let func = Function {
+            let func = Function::UserDefined {
                 name: identifier.clone(),
                 parameters: parameters.clone(),
                 body: body.clone(),
