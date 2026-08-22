@@ -15,6 +15,7 @@ enum RuntimeError {
     UnknownOperator(TokenType),
     DivideByZero,
     ArgumentCountMismatch(String, usize, usize),
+    IllegalControlFlow(ControlFlow),
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +31,15 @@ impl Value {
         }
     }
 }
+
+#[derive(Debug)]
+enum ControlFlow {
+    Normal,
+    Return(Value),
+    Break,
+    Continue,
+}
+
 #[derive(Clone)]
 struct Function {
     name: String,
@@ -56,9 +66,22 @@ impl Function {
         for kv in self.parameters.iter().zip(arguments) {
             environment.define(kv.0.clone(), kv.1.clone())?;
         }
-        execute_block(&self.body, environment)?;
+        match execute_block(&self.body, environment)? {
+            ControlFlow::Normal => {}
+            ControlFlow::Return(value) => {
+                environment.pop_scope();
+                return Ok(value);
+            }
+            ControlFlow::Break => {
+                environment.pop_scope();
+                return Err(RuntimeError::IllegalControlFlow(ControlFlow::Break));
+            }
+            ControlFlow::Continue => {
+                environment.pop_scope();
+                return Err(RuntimeError::IllegalControlFlow(ControlFlow::Continue));
+            }
+        }
         environment.pop_scope();
-        // return
         Ok(Value::Unit)
     }
 }
@@ -159,6 +182,16 @@ fn main() {
             RuntimeError::ArgumentCountMismatch(name, num_param, num_arg) => println!(
                 "Error: Function '{name}' takes {num_param} arguments, but '{num_arg}' were provided."
             ),
+            RuntimeError::IllegalControlFlow(control_flow) => match control_flow {
+                ControlFlow::Normal => println!("Somehow normal control flow is illegal."),
+                ControlFlow::Return(_) => {
+                    println!("Return statements may only be used inside functions")
+                }
+                ControlFlow::Break => println!("Break statements may only be used inside loops."),
+                ControlFlow::Continue => {
+                    println!("Continue statements may only be used inside loops.")
+                }
+            },
         },
     }
 }
@@ -179,21 +212,27 @@ fn execute_program(program: &Program, environment: &mut Environment) -> Result<(
 fn execute_block(
     block: &Vec<Statement>,
     environment: &mut Environment,
-) -> Result<(), RuntimeError> {
+) -> Result<ControlFlow, RuntimeError> {
     environment.push_scope();
 
     for statement in block {
-        execute_statement(&statement, environment)?;
+        match execute_statement(&statement, environment)? {
+            ControlFlow::Normal => {}
+            flow => {
+                environment.pop_scope();
+                return Ok(flow);
+            }
+        }
     }
 
     environment.pop_scope();
 
-    Ok(())
+    Ok(ControlFlow::Normal)
 }
 fn execute_statement(
     statement: &Statement,
     environment: &mut Environment,
-) -> Result<(), RuntimeError> {
+) -> Result<ControlFlow, RuntimeError> {
     match statement {
         Statement::Let {
             identifier,
@@ -214,15 +253,21 @@ fn execute_statement(
             body,
             else_block,
         } => {
-            if evaluate_expression(condition, environment)?.is_truthy() {
-                execute_block(body, environment)?;
+            return if evaluate_expression(condition, environment)?.is_truthy() {
+                execute_block(body, environment)
             } else if let Some(else_block) = else_block {
-                execute_block(else_block, environment)?;
-            }
+                execute_block(else_block, environment)
+            } else {
+                Ok(ControlFlow::Normal)
+            };
         }
         Statement::While { condition, body } => {
             while evaluate_expression(condition, environment)?.is_truthy() {
-                execute_block(body, environment)?;
+                match execute_block(body, environment)? {
+                    ControlFlow::Normal | ControlFlow::Continue => {}
+                    ControlFlow::Break => break,
+                    ControlFlow::Return(value) => return Ok(ControlFlow::Return(value)),
+                }
             }
         }
         Statement::For {
@@ -242,11 +287,18 @@ fn execute_statement(
                     }
                 }
 
-                execute_block(body, environment)?;
+                match execute_block(body, environment)? {
+                    ControlFlow::Normal | ControlFlow::Continue => {}
+                    ControlFlow::Return(value) => {
+                        environment.pop_scope();
+                        return Ok(ControlFlow::Return(value));
+                    }
+                    ControlFlow::Break => break,
+                }
 
                 if let Some(increment) = increment {
-                    execute_statement(increment, environment)?
-                };
+                    execute_statement(increment, environment)?;
+                }
             }
             environment.pop_scope();
         }
@@ -265,10 +317,20 @@ fn execute_statement(
         Statement::ExpressionStatement { expression } => {
             evaluate_expression(expression, environment)?;
         }
+        Statement::Return { value } => {
+            let value = match value {
+                Some(expression) => evaluate_expression(expression, environment)?,
+                None => Value::Unit,
+            };
+
+            return Ok(ControlFlow::Return(value));
+        }
+        Statement::Break => return Ok(ControlFlow::Break),
+        Statement::Continue => return Ok(ControlFlow::Continue),
         Statement::Pass => (),
     }
 
-    Ok(())
+    Ok(ControlFlow::Normal)
 }
 
 fn evaluate_expression(
