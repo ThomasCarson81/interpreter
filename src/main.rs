@@ -332,6 +332,9 @@ fn execute_statement(
             }
             environment.pop_scope();
         }
+        Statement::Scope { body } => {
+            return execute_block(body, environment);
+        }
         Statement::FunctionDefinition {
             identifier,
             parameters,
