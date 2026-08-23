@@ -1,5 +1,5 @@
 use std::{collections::HashMap, env, time};
-use syntax::{Expression, Program, Statement, TokenType};
+use syntax::{Expression, Program, Statement, TokenType, Value};
 mod builtins;
 #[derive(Debug)]
 enum InterpreterError {
@@ -16,20 +16,6 @@ enum RuntimeError {
     DivideByZero,
     ArgumentCountMismatch(String, usize, usize),
     IllegalControlFlow(ControlFlow),
-}
-
-#[derive(Debug, Clone)]
-enum Value {
-    Number(f64),
-    Unit,
-}
-impl Value {
-    fn is_truthy(&self) -> bool {
-        match self {
-            Value::Number(n) => *n > 0.0,
-            Value::Unit => false,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -357,7 +343,7 @@ fn evaluate_expression(
     environment: &mut Environment,
 ) -> Result<Value, RuntimeError> {
     match expression {
-        Expression::Number(num) => Ok(Value::Number(*num)),
+        Expression::Literal(val) => Ok(val.clone()),
         Expression::Identifier(name) => environment
             .get(name)
             .cloned()
@@ -461,12 +447,7 @@ fn evaluate_divide(left: Value, right: Value) -> Result<Value, RuntimeError> {
 
 fn evaluate_greater_than(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            if left > right {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left > right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::GreaterThan,
@@ -477,12 +458,7 @@ fn evaluate_greater_than(left: Value, right: Value) -> Result<Value, RuntimeErro
 
 fn evaluate_greater_than_or_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            if left >= right {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left >= right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::GreaterThanOrEqualTo,
@@ -493,12 +469,7 @@ fn evaluate_greater_than_or_equal_to(left: Value, right: Value) -> Result<Value,
 
 fn evaluate_less_than(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            if left < right {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left < right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::LessThan,
@@ -509,12 +480,7 @@ fn evaluate_less_than(left: Value, right: Value) -> Result<Value, RuntimeError> 
 
 fn evaluate_less_than_or_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            if left <= right {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left <= right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::LessThanOrEqualTo,
@@ -525,12 +491,8 @@ fn evaluate_less_than_or_equal_to(left: Value, right: Value) -> Result<Value, Ru
 
 fn evaluate_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            if left == right {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left == right)),
+        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(left == right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::EqualTo,
@@ -541,12 +503,8 @@ fn evaluate_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
 
 fn evaluate_not_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            if left != right {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left != right)),
+        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(left != right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::NotEqualTo,
@@ -557,12 +515,7 @@ fn evaluate_not_equal_to(left: Value, right: Value) -> Result<Value, RuntimeErro
 
 fn evaluate_logical_and(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(_), Value::Number(_)) => {
-            if left.is_truthy() && right.is_truthy() {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(*left && *right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::LogicalAnd,
@@ -573,12 +526,7 @@ fn evaluate_logical_and(left: Value, right: Value) -> Result<Value, RuntimeError
 
 fn evaluate_logical_or(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(_), Value::Number(_)) => {
-            if left.is_truthy() || right.is_truthy() {
-                return Ok(Value::Number(1.0));
-            }
-            Ok(Value::Number(0.0))
-        }
+        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(*left || *right)),
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::LogicalOr,
@@ -636,10 +584,11 @@ fn evaluate_decrement(
 }
 
 fn evaluate_not_operator(operand: &Value) -> Result<Value, RuntimeError> {
-    if !operand.is_truthy() {
-        Ok(Value::Number(1.0))
-    } else {
-        Ok(Value::Number(0.0))
+    match operand {
+        Value::Bool(b) => Ok(Value::Bool(!b)),
+        _ => Err(RuntimeError::TypeError(String::from(
+            "operator: '!' is only compatible with booleans.",
+        ))),
     }
 }
 

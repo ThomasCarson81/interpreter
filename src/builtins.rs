@@ -7,7 +7,7 @@ pub fn register_all(environment: &mut Environment) {
 
 fn builtin_print(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
     for value in args {
-        print!("{:?}", value);
+        print!("{value}");
     }
     Ok(Value::Unit)
 }
@@ -17,7 +17,7 @@ fn builtin_println(
     _environment: &mut Environment,
 ) -> Result<Value, RuntimeError> {
     for value in args {
-        println!("{:?}", value);
+        println!("{value}");
     }
     Ok(Value::Unit)
 }
