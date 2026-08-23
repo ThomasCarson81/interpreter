@@ -1,6 +1,6 @@
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, time};
 use syntax::{Expression, Program, Statement, TokenType};
-
+mod builtins;
 #[derive(Debug)]
 enum InterpreterError {
     CouldNotReadFile(String),
@@ -50,7 +50,6 @@ enum Function {
         body: Vec<Statement>,
     },
     BuiltIn {
-        name: String,
         function: BuiltInFunction,
     },
 }
@@ -143,7 +142,7 @@ impl Environment {
 
     fn define_builtin_func(&mut self, name: String, function: BuiltInFunction) {
         self.functions
-            .insert(name.clone(), Function::BuiltIn { name, function });
+            .insert(name.clone(), Function::BuiltIn { function });
     }
 
     fn call_func(&mut self, name: String, arguments: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -178,16 +177,15 @@ fn main() {
         scopes: Vec::new(),
         functions: HashMap::new(),
     };
+    builtins::register_all(&mut environment);
     environment.push_scope();
-    match execute_program(&program, &mut environment) {
+    let start_time = time::Instant::now();
+    let result = execute_program(&program, &mut environment);
+    let end_time = time::Instant::now();
+    let total_time = end_time - start_time;
+    match result {
         Ok(_) => {
-            println!("Program executed!");
-            println!("Global variables: ");
-            for scope in environment.scopes {
-                for (key, value) in scope.iter() {
-                    println!("{} = {:?}", key, value)
-                }
-            }
+            println!("\nProgram finished executing in {:?}", total_time);
         }
         Err(e) => match e {
             RuntimeError::UndefinedVariable(v) => println!("Undefined variable: {v}"),
