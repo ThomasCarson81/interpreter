@@ -16,6 +16,7 @@ enum RuntimeError {
     DivideByZero,
     ArgumentCountMismatch(String, usize, usize),
     IllegalControlFlow(ControlFlow),
+    VariableAlreadyDeclared(String),
 }
 
 #[derive(Debug)]
@@ -197,6 +198,9 @@ fn main() {
                     println!("Continue statements may only be used inside loops.")
                 }
             },
+            RuntimeError::VariableAlreadyDeclared(name) => {
+                println!("variable '{name}' already declared in this scope.")
+            }
         },
     }
 }
@@ -244,6 +248,16 @@ fn execute_statement(
             expression,
         } => {
             let val = evaluate_expression(&expression, environment)?;
+            if environment
+                .scopes
+                .last()
+                .ok_or(RuntimeError::OutOfScopes)?
+                .contains_key(identifier)
+            {
+                // cannot declare the same variable twice in the same scope
+                // you can do so in more local scopes
+                return Err(RuntimeError::VariableAlreadyDeclared(identifier.clone()));
+            }
             environment.define(identifier.clone(), val)?;
         }
         Statement::Assignment {
