@@ -258,7 +258,14 @@ fn execute_statement(
             body,
             else_block,
         } => {
-            return if evaluate_expression(condition, environment)?.is_truthy() {
+            let condition_result = evaluate_expression(condition, environment)?;
+            let exec = match condition_result {
+                Value::Bool(b) => Ok(b),
+                _ => Err(RuntimeError::TypeError(String::from(
+                    "expressions in 'if' statements must evaluate to a boolean.",
+                ))),
+            }?;
+            return if exec {
                 execute_block(body, environment)
             } else if let Some(else_block) = else_block {
                 execute_block(else_block, environment)
@@ -267,12 +274,24 @@ fn execute_statement(
             };
         }
         Statement::While { condition, body } => {
-            while evaluate_expression(condition, environment)?.is_truthy() {
+            let mut repeat = match evaluate_expression(condition, environment)? {
+                Value::Bool(b) => Ok(b),
+                _ => Err(RuntimeError::TypeError(String::from(
+                    "expressions in 'if' statements must evaluate to a boolean.",
+                ))),
+            }?;
+            while repeat {
                 match execute_block(body, environment)? {
                     ControlFlow::Normal | ControlFlow::Continue => {}
                     ControlFlow::Break => break,
                     ControlFlow::Return(value) => return Ok(ControlFlow::Return(value)),
                 }
+                repeat = match evaluate_expression(condition, environment)? {
+                    Value::Bool(b) => Ok(b),
+                    _ => Err(RuntimeError::TypeError(String::from(
+                        "conditions 'while' statements must evaluate to a boolean.",
+                    ))),
+                }?;
             }
         }
         Statement::For {
@@ -287,7 +306,13 @@ fn execute_statement(
             }
             loop {
                 if let Some(condition) = condition {
-                    if !evaluate_expression(condition, environment)?.is_truthy() {
+                    let again = match evaluate_expression(condition, environment)? {
+                        Value::Bool(b) => Ok(b),
+                        _ => Err(RuntimeError::TypeError(String::from(
+                            "conditions 'for' statements must evaluate to a boolean.",
+                        ))),
+                    }?;
+                    if !again {
                         break;
                     }
                 }
