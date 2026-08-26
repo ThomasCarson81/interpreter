@@ -204,6 +204,7 @@ fn main() {
         },
     }
 }
+
 fn get_ast_from_file(file_path: &str) -> Result<Program, InterpreterError> {
     let ast = std::fs::read_to_string(&file_path)
         .map_err(|e| InterpreterError::CouldNotReadFile(e.to_string()))?;
@@ -218,6 +219,7 @@ fn execute_program(program: &Program, environment: &mut Environment) -> Result<(
     }
     Ok(())
 }
+
 fn execute_block(
     block: &Vec<Statement>,
     environment: &mut Environment,
@@ -238,6 +240,7 @@ fn execute_block(
 
     Ok(ControlFlow::Normal)
 }
+
 fn execute_statement(
     statement: &Statement,
     environment: &mut Environment,
@@ -414,6 +417,7 @@ fn evaluate_expression(
         }
     }
 }
+
 fn evaluate_binary_operator(
     left: Value,
     operator: &TokenType,
@@ -453,6 +457,7 @@ fn evaluate_unary_operator(
 fn evaluate_plus(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
         (Value::Number(left), Value::Number(right)) => Ok(Value::Number(left + right)),
+        (Value::String(left), Value::String(right)) => Ok(Value::String(left.to_owned() + right)),
         _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Plus, right)),
     }
 }
