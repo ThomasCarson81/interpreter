@@ -1,5 +1,5 @@
 use std::{collections::HashMap, env, time};
-use syntax::{Expression, Program, Statement, TokenType, Value};
+use syntax::{Expression, Number, Program, Statement, TokenType, Value};
 mod builtins;
 #[derive(Debug)]
 enum InterpreterError {
@@ -13,7 +13,6 @@ enum RuntimeError {
     TypeError(String),
     BinOpTypeError(Value, TokenType, Value),
     UnknownOperator(TokenType),
-    DivideByZero,
     ArgumentCountMismatch(String, usize, usize),
     IllegalControlFlow(ControlFlow),
     VariableAlreadyDeclared(String),
@@ -184,7 +183,6 @@ fn main() {
                 left, right
             ),
             RuntimeError::UnknownOperator(op) => println!("Unknown operator: {op}"),
-            RuntimeError::DivideByZero => println!("Cannot divide by zero."),
             RuntimeError::ArgumentCountMismatch(name, num_param, num_arg) => println!(
                 "Error: Function '{name}' takes {num_param} arguments, but '{num_arg}' were provided."
             ),
@@ -456,7 +454,9 @@ fn evaluate_unary_operator(
 
 fn evaluate_plus(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Number(left + right)),
+        (Value::Number(left), Value::Number(right)) => {
+            Ok(Value::Number(add_numbers(*left, *right)?))
+        }
         (Value::String(left), Value::String(right)) => Ok(Value::String(left.to_owned() + right)),
         _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Plus, right)),
     }
@@ -464,14 +464,18 @@ fn evaluate_plus(left: Value, right: Value) -> Result<Value, RuntimeError> {
 
 fn evaluate_minus(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Number(left - right)),
+        (Value::Number(left), Value::Number(right)) => {
+            Ok(Value::Number(subtract_numbers(*left, *right)?))
+        }
         _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Minus, right)),
     }
 }
 
 fn evaluate_multiply(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Number(left * right)),
+        (Value::Number(left), Value::Number(right)) => {
+            Ok(Value::Number(multiply_numbers(*left, *right)?))
+        }
         _ => Err(RuntimeError::BinOpTypeError(
             left,
             TokenType::Asterisk,
@@ -483,10 +487,7 @@ fn evaluate_multiply(left: Value, right: Value) -> Result<Value, RuntimeError> {
 fn evaluate_divide(left: Value, right: Value) -> Result<Value, RuntimeError> {
     match (&left, &right) {
         (Value::Number(left), Value::Number(right)) => {
-            if *right == 0.0 {
-                return Err(RuntimeError::DivideByZero);
-            }
-            Ok(Value::Number(left / right))
+            Ok(Value::Number(divide_numbers(*left, *right)?)) // will panic on x / 0
         }
         _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Slash, right)),
     }
@@ -596,7 +597,7 @@ fn evaluate_increment(
                     "operator: '++' is only compatible with numbers.",
                 )));
             };
-            let new_num = Value::Number(n + 1.0);
+            let new_num = Value::Number(increment_number(*n)?);
             environment.assign(name, new_num.clone())?;
             Ok(new_num)
         }
@@ -620,7 +621,7 @@ fn evaluate_decrement(
                     "operator: '--' is only compatible with numbers.",
                 )));
             };
-            let new_num = Value::Number(n - 1.0);
+            let new_num = Value::Number(decrement_number(*n)?);
             environment.assign(name, new_num.clone())?;
             Ok(new_num)
         }
@@ -641,9 +642,145 @@ fn evaluate_not_operator(operand: &Value) -> Result<Value, RuntimeError> {
 
 fn evaluate_unary_minus(operand: &Value) -> Result<Value, RuntimeError> {
     match operand {
-        Value::Number(num) => Ok(Value::Number(-num)),
+        Value::Number(num) => Ok(Value::Number(negate_number(*num)?)),
         _ => Err(RuntimeError::TypeError(String::from(
             "operator: '-' is only compatible with numbers.",
         ))),
+    }
+}
+
+fn add_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left + right)),
+        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left + right)),
+        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left + right)),
+        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left + right)),
+
+        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left + right)),
+        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left + right)),
+        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left + right)),
+        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left + right)),
+
+        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left + right)),
+        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left + right)),
+        _ => Err(RuntimeError::BinOpTypeError(
+            Value::Number(left),
+            TokenType::Plus,
+            Value::Number(right),
+        )),
+    }
+}
+
+fn subtract_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left - right)),
+        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left - right)),
+        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left - right)),
+        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left - right)),
+
+        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left - right)),
+        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left - right)),
+        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left - right)),
+        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left - right)),
+
+        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left - right)),
+        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left - right)),
+        _ => Err(RuntimeError::BinOpTypeError(
+            Value::Number(left),
+            TokenType::Minus,
+            Value::Number(right),
+        )),
+    }
+}
+
+fn multiply_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left * right)),
+        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left * right)),
+        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left * right)),
+        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left * right)),
+
+        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left * right)),
+        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left * right)),
+        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left * right)),
+        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left * right)),
+
+        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left * right)),
+        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left * right)),
+        _ => Err(RuntimeError::BinOpTypeError(
+            Value::Number(left),
+            TokenType::Asterisk,
+            Value::Number(right),
+        )),
+    }
+}
+
+fn divide_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left / right)),
+        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left / right)),
+        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left / right)),
+        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left / right)),
+
+        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left / right)),
+        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left / right)),
+        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left / right)),
+        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left / right)),
+
+        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left / right)),
+        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left / right)),
+        _ => Err(RuntimeError::BinOpTypeError(
+            Value::Number(left),
+            TokenType::Slash,
+            Value::Number(right),
+        )),
+    }
+}
+
+fn negate_number(number: Number) -> Result<Number, RuntimeError> {
+    match number {
+        Number::I8(n) => Ok(Number::I8(-n)),
+        Number::I16(n) => Ok(Number::I16(-n)),
+        Number::I32(n) => Ok(Number::I32(-n)),
+        Number::I64(n) => Ok(Number::I64(-n)),
+        Number::F32(n) => Ok(Number::F32(-n)),
+        Number::F64(n) => Ok(Number::F64(-n)),
+        Number::U8(_) | Number::U16(_) | Number::U32(_) | Number::U64(_) => Err(
+            RuntimeError::TypeError(String::from("Cannot negate unsigned numbers")),
+        ),
+    }
+}
+
+fn increment_number(number: Number) -> Result<Number, RuntimeError> {
+    match number {
+        Number::I8(n) => Ok(Number::I8(n + 1)),
+        Number::I16(n) => Ok(Number::I16(n + 1)),
+        Number::I32(n) => Ok(Number::I32(n + 1)),
+        Number::I64(n) => Ok(Number::I64(n + 1)),
+
+        Number::U8(n) => Ok(Number::U8(n + 1)),
+        Number::U16(n) => Ok(Number::U16(n + 1)),
+        Number::U32(n) => Ok(Number::U32(n + 1)),
+        Number::U64(n) => Ok(Number::U64(n + 1)),
+
+        Number::F32(n) => Ok(Number::F32(n + 1.0)),
+        Number::F64(n) => Ok(Number::F64(n + 1.0)),
+    }
+}
+
+fn decrement_number(number: Number) -> Result<Number, RuntimeError> {
+    match number {
+        Number::I8(n) => Ok(Number::I8(n - 1)),
+        Number::I16(n) => Ok(Number::I16(n - 1)),
+        Number::I32(n) => Ok(Number::I32(n - 1)),
+        Number::I64(n) => Ok(Number::I64(n - 1)),
+
+        Number::U8(n) => Ok(Number::U8(n - 1)),
+        Number::U16(n) => Ok(Number::U16(n - 1)),
+        Number::U32(n) => Ok(Number::U32(n - 1)),
+        Number::U64(n) => Ok(Number::U64(n - 1)),
+
+        Number::F32(n) => Ok(Number::F32(n - 1.0)),
+        Number::F64(n) => Ok(Number::F64(n - 1.0)),
     }
 }
