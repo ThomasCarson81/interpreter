@@ -1,10 +1,11 @@
-use syntax::{Number, Value};
-
 use crate::{Environment, RuntimeError};
+use prompted::input;
+use syntax::{Number, Value};
 
 pub fn register_all(environment: &mut Environment) {
     environment.define_builtin_func(String::from("print"), builtin_print);
     environment.define_builtin_func(String::from("println"), builtin_println);
+    environment.define_builtin_func(String::from("input"), cmd_input);
     environment.define_builtin_func(String::from("as_i8"), as_i8);
     environment.define_builtin_func(String::from("as_i16"), as_i16);
     environment.define_builtin_func(String::from("as_i32"), as_i32);
@@ -304,4 +305,17 @@ fn as_f64(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, Run
             String::from("only number types may be cast."),
         )),
     }
+}
+
+fn cmd_input(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+    if args.len() > 1 {
+        return Err(RuntimeError::ArgumentCountMismatch(
+            String::from("input"),
+            1,
+            args.len(),
+        ));
+    }
+    let user_input = input!("{}", args[0]);
+
+    Ok(Value::String(user_input))
 }
