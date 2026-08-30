@@ -1,4 +1,4 @@
-use crate::{Environment, RuntimeError};
+use crate::Environment;
 use prompted::input;
 use syntax::{Number, Value};
 
@@ -18,304 +18,277 @@ pub fn register_all(environment: &mut Environment) {
     environment.define_builtin_func(String::from("as_f64"), as_f64);
 }
 
-fn builtin_print(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn builtin_print(args: Vec<Value>, _environment: &mut Environment) -> Value {
     for value in args {
         print!("{value}");
     }
-    Ok(Value::Unit)
+    Value::Unit
 }
 
-fn builtin_println(
-    args: Vec<Value>,
-    _environment: &mut Environment,
-) -> Result<Value, RuntimeError> {
+fn builtin_println(args: Vec<Value>, _environment: &mut Environment) -> Value {
     for value in args {
         println!("{value}");
     }
-    Ok(Value::Unit)
+    Value::Unit
 }
 
 // number casts - will be removed when a proper cast system is developed
 
-fn as_i8(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_i8(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_i8"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::I8(n))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::I8(n as i8))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::I8(n as i8))),
+            Number::I8(n) => Value::Number(Number::I8(n)),
+            Number::I16(n) => Value::Number(Number::I8(n as i8)),
+            Number::I32(n) => Value::Number(Number::I8(n as i8)),
+            Number::I64(n) => Value::Number(Number::I8(n as i8)),
+            Number::U8(n) => Value::Number(Number::I8(n as i8)),
+            Number::U16(n) => Value::Number(Number::I8(n as i8)),
+            Number::U32(n) => Value::Number(Number::I8(n as i8)),
+            Number::U64(n) => Value::Number(Number::I8(n as i8)),
+            Number::F32(n) => Value::Number(Number::I8(n as i8)),
+            Number::F64(n) => Value::Number(Number::I8(n as i8)),
+            Number::IntegerLiteral(n) => Value::Number(Number::I8(n as i8)),
+            Number::FloatLiteral(n) => Value::Number(Number::I8(n as i8)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_i16(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_i16(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_i16"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::I16(n))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::I16(n as i16))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::I16(n as i16))),
+            Number::I8(n) => Value::Number(Number::I16(n as i16)),
+            Number::I16(n) => Value::Number(Number::I16(n)),
+            Number::I32(n) => Value::Number(Number::I16(n as i16)),
+            Number::I64(n) => Value::Number(Number::I16(n as i16)),
+            Number::U8(n) => Value::Number(Number::I16(n as i16)),
+            Number::U16(n) => Value::Number(Number::I16(n as i16)),
+            Number::U32(n) => Value::Number(Number::I16(n as i16)),
+            Number::U64(n) => Value::Number(Number::I16(n as i16)),
+            Number::F32(n) => Value::Number(Number::I16(n as i16)),
+            Number::F64(n) => Value::Number(Number::I16(n as i16)),
+            Number::IntegerLiteral(n) => Value::Number(Number::I16(n as i16)),
+            Number::FloatLiteral(n) => Value::Number(Number::I16(n as i16)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_i32(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_i32(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_i32"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::I32(n))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::I32(n as i32))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::I32(n as i32))),
+            Number::I8(n) => Value::Number(Number::I32(n as i32)),
+            Number::I16(n) => Value::Number(Number::I32(n as i32)),
+            Number::I32(n) => Value::Number(Number::I32(n)),
+            Number::I64(n) => Value::Number(Number::I32(n as i32)),
+            Number::U8(n) => Value::Number(Number::I32(n as i32)),
+            Number::U16(n) => Value::Number(Number::I32(n as i32)),
+            Number::U32(n) => Value::Number(Number::I32(n as i32)),
+            Number::U64(n) => Value::Number(Number::I32(n as i32)),
+            Number::F32(n) => Value::Number(Number::I32(n as i32)),
+            Number::F64(n) => Value::Number(Number::I32(n as i32)),
+            Number::IntegerLiteral(n) => Value::Number(Number::I32(n as i32)),
+            Number::FloatLiteral(n) => Value::Number(Number::I32(n as i32)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_i64(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_i64(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_i64"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::I64(n as i64))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::I64(n as i64))),
+            Number::I8(n) => Value::Number(Number::I64(n as i64)),
+            Number::I16(n) => Value::Number(Number::I64(n as i64)),
+            Number::I32(n) => Value::Number(Number::I64(n as i64)),
+            Number::I64(n) => Value::Number(Number::I64(n as i64)),
+            Number::U8(n) => Value::Number(Number::I64(n as i64)),
+            Number::U16(n) => Value::Number(Number::I64(n as i64)),
+            Number::U32(n) => Value::Number(Number::I64(n as i64)),
+            Number::U64(n) => Value::Number(Number::I64(n as i64)),
+            Number::F32(n) => Value::Number(Number::I64(n as i64)),
+            Number::F64(n) => Value::Number(Number::I64(n as i64)),
+            Number::IntegerLiteral(n) => Value::Number(Number::I64(n as i64)),
+            Number::FloatLiteral(n) => Value::Number(Number::I64(n as i64)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_u8(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_u8(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_u8"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::U8(n))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::U8(n as u8))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::U8(n as u8))),
+            Number::I8(n) => Value::Number(Number::U8(n as u8)),
+            Number::I16(n) => Value::Number(Number::U8(n as u8)),
+            Number::I32(n) => Value::Number(Number::U8(n as u8)),
+            Number::I64(n) => Value::Number(Number::U8(n as u8)),
+            Number::U8(n) => Value::Number(Number::U8(n)),
+            Number::U16(n) => Value::Number(Number::U8(n as u8)),
+            Number::U32(n) => Value::Number(Number::U8(n as u8)),
+            Number::U64(n) => Value::Number(Number::U8(n as u8)),
+            Number::F32(n) => Value::Number(Number::U8(n as u8)),
+            Number::F64(n) => Value::Number(Number::U8(n as u8)),
+            Number::IntegerLiteral(n) => Value::Number(Number::U8(n as u8)),
+            Number::FloatLiteral(n) => Value::Number(Number::U8(n as u8)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_u16(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_u16(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_u16"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::U16(n))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::U16(n as u16))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::U16(n as u16))),
+            Number::I8(n) => Value::Number(Number::U16(n as u16)),
+            Number::I16(n) => Value::Number(Number::U16(n as u16)),
+            Number::I32(n) => Value::Number(Number::U16(n as u16)),
+            Number::I64(n) => Value::Number(Number::U16(n as u16)),
+            Number::U8(n) => Value::Number(Number::U16(n as u16)),
+            Number::U16(n) => Value::Number(Number::U16(n)),
+            Number::U32(n) => Value::Number(Number::U16(n as u16)),
+            Number::U64(n) => Value::Number(Number::U16(n as u16)),
+            Number::F32(n) => Value::Number(Number::U16(n as u16)),
+            Number::F64(n) => Value::Number(Number::U16(n as u16)),
+            Number::IntegerLiteral(n) => Value::Number(Number::U8(n as u8)),
+            Number::FloatLiteral(n) => Value::Number(Number::U8(n as u8)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_u32(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_u32(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_u32"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::U32(n))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::U32(n as u32))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::U32(n as u32))),
+            Number::I8(n) => Value::Number(Number::U32(n as u32)),
+            Number::I16(n) => Value::Number(Number::U32(n as u32)),
+            Number::I32(n) => Value::Number(Number::U32(n as u32)),
+            Number::I64(n) => Value::Number(Number::U32(n as u32)),
+            Number::U8(n) => Value::Number(Number::U32(n as u32)),
+            Number::U16(n) => Value::Number(Number::U32(n as u32)),
+            Number::U32(n) => Value::Number(Number::U32(n)),
+            Number::U64(n) => Value::Number(Number::U32(n as u32)),
+            Number::F32(n) => Value::Number(Number::U32(n as u32)),
+            Number::F64(n) => Value::Number(Number::U32(n as u32)),
+            Number::IntegerLiteral(n) => Value::Number(Number::U32(n as u32)),
+            Number::FloatLiteral(n) => Value::Number(Number::U32(n as u32)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_u64(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_u64(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_u64"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::U64(n))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::U64(n as u64))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::U64(n as u64))),
+            Number::I8(n) => Value::Number(Number::U64(n as u64)),
+            Number::I16(n) => Value::Number(Number::U64(n as u64)),
+            Number::I32(n) => Value::Number(Number::U64(n as u64)),
+            Number::I64(n) => Value::Number(Number::U64(n as u64)),
+            Number::U8(n) => Value::Number(Number::U64(n as u64)),
+            Number::U16(n) => Value::Number(Number::U64(n as u64)),
+            Number::U32(n) => Value::Number(Number::U64(n as u64)),
+            Number::U64(n) => Value::Number(Number::U64(n)),
+            Number::F32(n) => Value::Number(Number::U64(n as u64)),
+            Number::F64(n) => Value::Number(Number::U64(n as u64)),
+            Number::IntegerLiteral(n) => Value::Number(Number::U64(n as u64)),
+            Number::FloatLiteral(n) => Value::Number(Number::U64(n as u64)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_f32(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_f32(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_f32"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::F32(n as f32))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::F32(n))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::F32(n as f32))),
+            Number::I8(n) => Value::Number(Number::F32(n as f32)),
+            Number::I16(n) => Value::Number(Number::F32(n as f32)),
+            Number::I32(n) => Value::Number(Number::F32(n as f32)),
+            Number::I64(n) => Value::Number(Number::F32(n as f32)),
+            Number::U8(n) => Value::Number(Number::F32(n as f32)),
+            Number::U16(n) => Value::Number(Number::F32(n as f32)),
+            Number::U32(n) => Value::Number(Number::F32(n as f32)),
+            Number::U64(n) => Value::Number(Number::F32(n as f32)),
+            Number::F32(n) => Value::Number(Number::F32(n)),
+            Number::F64(n) => Value::Number(Number::F32(n as f32)),
+            Number::IntegerLiteral(n) => Value::Number(Number::F32(n as f32)),
+            Number::FloatLiteral(n) => Value::Number(Number::F32(n as f32)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn as_f64(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn as_f64(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() != 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("as_f64"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     match args[0] {
         Value::Number(number) => match number {
-            syntax::Number::I8(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::I16(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::I32(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::I64(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::U8(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::U16(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::U32(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::U64(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::F32(n) => Ok(Value::Number(Number::F64(n as f64))),
-            syntax::Number::F64(n) => Ok(Value::Number(Number::F64(n))),
+            Number::I8(n) => Value::Number(Number::F64(n as f64)),
+            Number::I16(n) => Value::Number(Number::F64(n as f64)),
+            Number::I32(n) => Value::Number(Number::F64(n as f64)),
+            Number::I64(n) => Value::Number(Number::F64(n as f64)),
+            Number::U8(n) => Value::Number(Number::F64(n as f64)),
+            Number::U16(n) => Value::Number(Number::F64(n as f64)),
+            Number::U32(n) => Value::Number(Number::F64(n as f64)),
+            Number::U64(n) => Value::Number(Number::F64(n as f64)),
+            Number::F32(n) => Value::Number(Number::F64(n as f64)),
+            Number::F64(n) => Value::Number(Number::F64(n)),
+            Number::IntegerLiteral(n) => Value::Number(Number::F64(n as f64)),
+            Number::FloatLiteral(n) => Value::Number(Number::F64(n as f64)),
         },
-        Value::String(_) | Value::Bool(_) | Value::Unit => Err(RuntimeError::TypeError(
-            String::from("only number types may be cast."),
-        )),
+        Value::String(_) | Value::Bool(_) | Value::Unit => {
+            unreachable!("type checker missed only nums casting")
+        }
     }
 }
 
-fn cmd_input(args: Vec<Value>, _environment: &mut Environment) -> Result<Value, RuntimeError> {
+fn cmd_input(args: Vec<Value>, _environment: &mut Environment) -> Value {
     if args.len() > 1 {
-        return Err(RuntimeError::ArgumentCountMismatch(
-            String::from("input"),
-            1,
-            args.len(),
-        ));
+        unreachable!("semantic analyser missed arg count mismatch");
     }
     let user_input = input!("{}", args[0]);
 
-    Ok(Value::String(user_input))
+    Value::String(user_input)
 }

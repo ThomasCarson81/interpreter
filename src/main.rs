@@ -1,21 +1,9 @@
 use std::{collections::HashMap, env, time};
-use syntax::{Expression, Number, Program, Statement, TokenType, Value};
+use syntax::{Expression, FunctionParameter, Number, Program, Statement, TokenType, Value};
 mod builtins;
 #[derive(Debug)]
 enum InterpreterError {
     CouldNotReadFile(String),
-}
-#[derive(Debug)]
-enum RuntimeError {
-    UndefinedVariable(String),
-    UndefinedFunction(String),
-    OutOfScopes,
-    TypeError(String),
-    BinOpTypeError(Value, TokenType, Value),
-    UnknownOperator(TokenType),
-    ArgumentCountMismatch(String, usize, usize),
-    IllegalControlFlow(ControlFlow),
-    VariableAlreadyDeclared(String),
 }
 
 #[derive(Debug)]
@@ -26,13 +14,12 @@ enum ControlFlow {
     Continue,
 }
 
-type BuiltInFunction = fn(Vec<Value>, &mut Environment) -> Result<Value, RuntimeError>;
+type BuiltInFunction = fn(Vec<Value>, &mut Environment) -> Value;
 
 #[derive(Clone)]
 enum Function {
     UserDefined {
-        name: String,
-        parameters: Vec<String>,
+        parameters: Vec<FunctionParameter>,
         body: Vec<Statement>,
     },
     BuiltIn {
@@ -40,47 +27,35 @@ enum Function {
     },
 }
 impl Function {
-    fn call(
-        &self,
-        arguments: Vec<Value>,
-        environment: &mut Environment,
-    ) -> Result<Value, RuntimeError> {
+    fn call(&self, arguments: Vec<Value>, environment: &mut Environment) -> Value {
         match self {
-            Function::UserDefined {
-                name,
-                parameters,
-                body,
-            } => {
+            Function::UserDefined { parameters, body } => {
                 let num_params = parameters.len();
                 let num_args = arguments.len();
                 if num_params != num_args {
-                    return Err(RuntimeError::ArgumentCountMismatch(
-                        name.clone(),
-                        num_params,
-                        num_args,
-                    ));
+                    unreachable!("semantic analyser missed argument count mismatch");
                 }
                 environment.push_scope();
                 for (parameter, argument) in parameters.iter().zip(arguments) {
-                    environment.define(parameter.clone(), argument)?;
+                    environment.define(parameter.name.clone(), argument);
                 }
-                match execute_block(&body, environment)? {
+                match execute_block(&body, environment) {
                     ControlFlow::Normal => {}
                     ControlFlow::Return(value) => {
                         environment.pop_scope();
-                        return Ok(value);
+                        return value;
                     }
                     ControlFlow::Break => {
                         environment.pop_scope();
-                        return Err(RuntimeError::IllegalControlFlow(ControlFlow::Break));
+                        unreachable!("illegal control flow: break");
                     }
                     ControlFlow::Continue => {
                         environment.pop_scope();
-                        return Err(RuntimeError::IllegalControlFlow(ControlFlow::Continue));
+                        unreachable!("illegal control flow: continue");
                     }
                 }
                 environment.pop_scope();
-                Ok(Value::Unit)
+                Value::Unit
             }
             Function::BuiltIn { function, .. } => function(arguments, environment),
         }
@@ -100,26 +75,30 @@ impl Environment {
         self.scopes.pop();
     }
 
-    fn define(&mut self, name: String, value: Value) -> Result<(), RuntimeError> {
-        self.scopes
+    fn define(&mut self, name: String, value: Value) {
+        let last_scope = self
+            .scopes
             .last_mut()
-            .ok_or(RuntimeError::OutOfScopes)?
-            .insert(name, value);
-        Ok(())
+            .expect("name resolver missed scope error");
+        last_scope.insert(name, value);
     }
 
-    fn get(&self, name: &str) -> Option<&Value> {
-        self.scopes.iter().rev().find_map(|scope| scope.get(name))
+    fn get(&self, name: &str) -> &Value {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name))
+            .expect("name resolver missed undeclared variable in get")
     }
 
-    fn assign(&mut self, name: &str, value: Value) -> Result<(), RuntimeError> {
+    fn assign(&mut self, name: &str, value: Value) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.contains_key(name) {
                 scope.insert(name.to_string(), value);
-                return Ok(());
+                return;
             }
         }
-        Err(RuntimeError::UndefinedVariable(name.to_string()))
+        unreachable!("name resolver missed undeclared variable in assignment")
     }
 
     fn define_func(&mut self, name: String, value: Function) {
@@ -131,13 +110,12 @@ impl Environment {
             .insert(name.clone(), Function::BuiltIn { function });
     }
 
-    fn call_func(&mut self, name: String, arguments: Vec<Value>) -> Result<Value, RuntimeError> {
-        let func = self
-            .functions
+    fn call_func(&mut self, name: String, arguments: Vec<Value>) -> Value {
+        self.functions
             .get(&name)
-            .cloned()
-            .ok_or(RuntimeError::UndefinedFunction(name))?;
-        func.call(arguments, self)
+            .expect("name resolver missed undefined function")
+            .clone()
+            .call(arguments, self)
     }
 }
 
@@ -166,40 +144,17 @@ fn main() {
     builtins::register_all(&mut environment);
     environment.push_scope();
     let start_time = time::Instant::now();
-    let result = execute_program(&program, &mut environment);
+    execute_program(&program, &mut environment);
     let end_time = time::Instant::now();
     let total_time = end_time - start_time;
-    match result {
-        Ok(_) => {
-            println!("\nProgram finished executing in {:?}", total_time);
+
+    println!("\nProgram finished executing in {:?}", total_time);
+
+    println!("Global variables: ");
+    for scope in environment.scopes {
+        for kv in scope {
+            println!("{}={}", kv.0, kv.1);
         }
-        Err(e) => match e {
-            RuntimeError::UndefinedVariable(v) => println!("Undefined variable: {v}"),
-            RuntimeError::UndefinedFunction(f) => println!("Undefined function: {f}"),
-            RuntimeError::OutOfScopes => println!("Interpreter ran out of scopes."),
-            RuntimeError::TypeError(msg) => println!("TypeError: {msg}"),
-            RuntimeError::BinOpTypeError(left, op, right) => println!(
-                "TypeError: operator: '{op}' is incompatible between types '{:?}' and '{:?}'",
-                left, right
-            ),
-            RuntimeError::UnknownOperator(op) => println!("Unknown operator: {op}"),
-            RuntimeError::ArgumentCountMismatch(name, num_param, num_arg) => println!(
-                "Error: Function '{name}' takes {num_param} arguments, but '{num_arg}' were provided."
-            ),
-            RuntimeError::IllegalControlFlow(control_flow) => match control_flow {
-                ControlFlow::Normal => println!("Somehow normal control flow is illegal."),
-                ControlFlow::Return(_) => {
-                    println!("Return statements may only be used inside functions")
-                }
-                ControlFlow::Break => println!("Break statements may only be used inside loops."),
-                ControlFlow::Continue => {
-                    println!("Continue statements may only be used inside loops.")
-                }
-            },
-            RuntimeError::VariableAlreadyDeclared(name) => {
-                println!("variable '{name}' already declared in this scope.")
-            }
-        },
     }
 }
 
@@ -211,102 +166,81 @@ fn get_ast_from_file(file_path: &str) -> Result<Program, InterpreterError> {
     Ok(program)
 }
 
-fn execute_program(program: &Program, environment: &mut Environment) -> Result<(), RuntimeError> {
+fn execute_program(program: &Program, environment: &mut Environment) {
     for statement in &program.statements {
-        execute_statement(statement, environment)?;
+        execute_statement(statement, environment);
     }
-    Ok(())
 }
 
-fn execute_block(
-    block: &Vec<Statement>,
-    environment: &mut Environment,
-) -> Result<ControlFlow, RuntimeError> {
+fn execute_block(block: &Vec<Statement>, environment: &mut Environment) -> ControlFlow {
     environment.push_scope();
 
     for statement in block {
-        match execute_statement(&statement, environment)? {
+        match execute_statement(&statement, environment) {
             ControlFlow::Normal => {}
             flow => {
                 environment.pop_scope();
-                return Ok(flow);
+                return flow;
             }
         }
     }
 
     environment.pop_scope();
 
-    Ok(ControlFlow::Normal)
+    ControlFlow::Normal
 }
 
-fn execute_statement(
-    statement: &Statement,
-    environment: &mut Environment,
-) -> Result<ControlFlow, RuntimeError> {
+fn execute_statement(statement: &Statement, environment: &mut Environment) -> ControlFlow {
     match statement {
         Statement::Let {
             identifier,
             expression,
+            mutable: _, // mutability and types are checked before runtime
+            var_type: _,
         } => {
-            let val = evaluate_expression(&expression, environment)?;
-            if environment
-                .scopes
-                .last()
-                .ok_or(RuntimeError::OutOfScopes)?
-                .contains_key(identifier)
-            {
-                // cannot declare the same variable twice in the same scope
-                // you can do so in more local scopes
-                return Err(RuntimeError::VariableAlreadyDeclared(identifier.clone()));
-            }
-            environment.define(identifier.clone(), val)?;
+            let val = evaluate_expression(&expression, environment);
+            environment.define(identifier.clone(), val);
         }
         Statement::Assignment {
             identifier,
             expression,
         } => {
-            let val = evaluate_expression(expression, environment)?;
-            environment.assign(identifier, val)?;
+            let val = evaluate_expression(expression, environment);
+            environment.assign(identifier, val);
         }
         Statement::If {
             condition,
             body,
             else_block,
         } => {
-            let condition_result = evaluate_expression(condition, environment)?;
+            let condition_result = evaluate_expression(condition, environment);
             let exec = match condition_result {
-                Value::Bool(b) => Ok(b),
-                _ => Err(RuntimeError::TypeError(String::from(
-                    "expressions in 'if' statements must evaluate to a boolean.",
-                ))),
-            }?;
+                Value::Bool(b) => b,
+                _ => unreachable!("type checker missed if statement non bool expression"),
+            };
             return if exec {
                 execute_block(body, environment)
             } else if let Some(else_block) = else_block {
                 execute_block(else_block, environment)
             } else {
-                Ok(ControlFlow::Normal)
+                ControlFlow::Normal
             };
         }
         Statement::While { condition, body } => {
-            let mut repeat = match evaluate_expression(condition, environment)? {
-                Value::Bool(b) => Ok(b),
-                _ => Err(RuntimeError::TypeError(String::from(
-                    "expressions in 'if' statements must evaluate to a boolean.",
-                ))),
-            }?;
+            let mut repeat = match evaluate_expression(condition, environment) {
+                Value::Bool(b) => b,
+                _ => unreachable!("type checker missed while statement non bool expression"),
+            };
             while repeat {
-                match execute_block(body, environment)? {
+                match execute_block(body, environment) {
                     ControlFlow::Normal | ControlFlow::Continue => {}
                     ControlFlow::Break => break,
-                    ControlFlow::Return(value) => return Ok(ControlFlow::Return(value)),
+                    ControlFlow::Return(value) => return ControlFlow::Return(value),
                 }
-                repeat = match evaluate_expression(condition, environment)? {
-                    Value::Bool(b) => Ok(b),
-                    _ => Err(RuntimeError::TypeError(String::from(
-                        "conditions 'while' statements must evaluate to a boolean.",
-                    ))),
-                }?;
+                repeat = match evaluate_expression(condition, environment) {
+                    Value::Bool(b) => b,
+                    _ => unreachable!("type checker missed while statement non bool expression"),
+                };
             }
         }
         Statement::For {
@@ -317,32 +251,30 @@ fn execute_statement(
         } => {
             environment.push_scope();
             if let Some(init) = initialiser {
-                execute_statement(init, environment)?;
+                execute_statement(init, environment);
             }
             loop {
                 if let Some(condition) = condition {
-                    let again = match evaluate_expression(condition, environment)? {
-                        Value::Bool(b) => Ok(b),
-                        _ => Err(RuntimeError::TypeError(String::from(
-                            "conditions 'for' statements must evaluate to a boolean.",
-                        ))),
-                    }?;
+                    let again = match evaluate_expression(condition, environment) {
+                        Value::Bool(b) => b,
+                        _ => unreachable!("type checker missed for statement non bool expression"),
+                    };
                     if !again {
                         break;
                     }
                 }
 
-                match execute_block(body, environment)? {
+                match execute_block(body, environment) {
                     ControlFlow::Normal | ControlFlow::Continue => {}
                     ControlFlow::Return(value) => {
                         environment.pop_scope();
-                        return Ok(ControlFlow::Return(value));
+                        return ControlFlow::Return(value);
                     }
                     ControlFlow::Break => break,
                 }
 
                 if let Some(increment) = increment {
-                    execute_statement(increment, environment)?;
+                    execute_statement(increment, environment);
                 }
             }
             environment.pop_scope();
@@ -354,50 +286,44 @@ fn execute_statement(
             identifier,
             parameters,
             body,
+            return_type: _,
         } => {
             let func = Function::UserDefined {
-                name: identifier.clone(),
                 parameters: parameters.clone(),
                 body: body.clone(),
             };
             environment.define_func(identifier.clone(), func);
         }
         Statement::ExpressionStatement { expression } => {
-            evaluate_expression(expression, environment)?;
+            evaluate_expression(expression, environment);
         }
         Statement::Return { value } => {
             let value = match value {
-                Some(expression) => evaluate_expression(expression, environment)?,
+                Some(expression) => evaluate_expression(expression, environment),
                 None => Value::Unit,
             };
 
-            return Ok(ControlFlow::Return(value));
+            return ControlFlow::Return(value);
         }
-        Statement::Break => return Ok(ControlFlow::Break),
-        Statement::Continue => return Ok(ControlFlow::Continue),
+        Statement::Break => return ControlFlow::Break,
+        Statement::Continue => return ControlFlow::Continue,
         Statement::Pass => (),
     }
 
-    Ok(ControlFlow::Normal)
+    ControlFlow::Normal
 }
 
-fn evaluate_expression(
-    expression: &Expression,
-    environment: &mut Environment,
-) -> Result<Value, RuntimeError> {
+fn evaluate_expression(expression: &Expression, environment: &mut Environment) -> Value {
     match expression {
-        Expression::Literal(val) => Ok(val.clone()),
-        Expression::Identifier(name) => environment
-            .get(name)
-            .cloned()
-            .ok_or(RuntimeError::UndefinedVariable(name.clone())),
+        Expression::Literal(val) => val.clone(),
+        Expression::Identifier(name) => environment.get(name).clone(),
         Expression::BinaryOp {
             left,
             operator,
             right,
         } => {
-            let left = evaluate_expression(left, environment)?;
-            let right = evaluate_expression(right, environment)?;
+            let left = evaluate_expression(left, environment);
+            let right = evaluate_expression(right, environment);
             evaluate_binary_operator(left, operator, right)
         }
         Expression::UnaryOp { operator, operand } => {
@@ -410,17 +336,13 @@ fn evaluate_expression(
             let args = arguments
                 .iter()
                 .map(|arg| evaluate_expression(arg, environment))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(environment.call_func(identifier.clone(), args)?)
+                .collect();
+            environment.call_func(identifier.clone(), args)
         }
     }
 }
 
-fn evaluate_binary_operator(
-    left: Value,
-    operator: &TokenType,
-    right: Value,
-) -> Result<Value, RuntimeError> {
+fn evaluate_binary_operator(left: Value, operator: &TokenType, right: Value) -> Value {
     match operator {
         TokenType::Plus => evaluate_plus(left, right),
         TokenType::Minus => evaluate_minus(left, right),
@@ -434,7 +356,10 @@ fn evaluate_binary_operator(
         TokenType::NotEqualTo => evaluate_not_equal_to(left, right),
         TokenType::LogicalOr => evaluate_logical_or(left, right),
         TokenType::LogicalAnd => evaluate_logical_and(left, right),
-        _ => Err(RuntimeError::UnknownOperator(*operator)),
+        _ => unreachable!(
+            "semantic analyser missed unknown binary operator: {}",
+            operator
+        ),
     }
 }
 
@@ -442,345 +367,339 @@ fn evaluate_unary_operator(
     operand: &Expression,
     operator: &TokenType,
     environment: &mut Environment,
-) -> Result<Value, RuntimeError> {
+) -> Value {
     match operator {
         TokenType::Increment => evaluate_increment(operand, environment),
         TokenType::Decrement => evaluate_decrement(operand, environment),
-        TokenType::Not => evaluate_not_operator(&evaluate_expression(operand, environment)?),
-        TokenType::Minus => evaluate_unary_minus(&evaluate_expression(operand, environment)?),
-        _ => Err(RuntimeError::UnknownOperator(*operator)),
-    }
-}
-
-fn evaluate_plus(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            Ok(Value::Number(add_numbers(*left, *right)?))
-        }
-        (Value::String(left), Value::String(right)) => Ok(Value::String(left.to_owned() + right)),
-        _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Plus, right)),
-    }
-}
-
-fn evaluate_minus(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            Ok(Value::Number(subtract_numbers(*left, *right)?))
-        }
-        _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Minus, right)),
-    }
-}
-
-fn evaluate_multiply(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            Ok(Value::Number(multiply_numbers(*left, *right)?))
-        }
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::Asterisk,
-            right,
-        )),
-    }
-}
-
-fn evaluate_divide(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => {
-            Ok(Value::Number(divide_numbers(*left, *right)?)) // will panic on x / 0
-        }
-        _ => Err(RuntimeError::BinOpTypeError(left, TokenType::Slash, right)),
-    }
-}
-
-fn evaluate_greater_than(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left > right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::GreaterThan,
-            right,
-        )),
-    }
-}
-
-fn evaluate_greater_than_or_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left >= right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::GreaterThanOrEqualTo,
-            right,
-        )),
-    }
-}
-
-fn evaluate_less_than(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left < right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::LessThan,
-            right,
-        )),
-    }
-}
-
-fn evaluate_less_than_or_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left <= right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::LessThanOrEqualTo,
-            right,
-        )),
-    }
-}
-
-fn evaluate_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left == right)),
-        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(left == right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::EqualTo,
-            right,
-        )),
-    }
-}
-
-fn evaluate_not_equal_to(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Number(left), Value::Number(right)) => Ok(Value::Bool(left != right)),
-        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(left != right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::NotEqualTo,
-            right,
-        )),
-    }
-}
-
-fn evaluate_logical_and(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(*left && *right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::LogicalAnd,
-            right,
-        )),
-    }
-}
-
-fn evaluate_logical_or(left: Value, right: Value) -> Result<Value, RuntimeError> {
-    match (&left, &right) {
-        (Value::Bool(left), Value::Bool(right)) => Ok(Value::Bool(*left || *right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            left,
-            TokenType::LogicalOr,
-            right,
-        )),
-    }
-}
-
-fn evaluate_increment(
-    operand: &Expression,
-    environment: &mut Environment,
-) -> Result<Value, RuntimeError> {
-    match operand {
-        Expression::Identifier(name) => {
-            let num = environment
-                .get(name)
-                .ok_or(RuntimeError::UndefinedVariable(name.clone()))?;
-            let Value::Number(n) = num else {
-                return Err(RuntimeError::TypeError(String::from(
-                    "operator: '++' is only compatible with numbers.",
-                )));
-            };
-            let new_num = Value::Number(increment_number(*n)?);
-            environment.assign(name, new_num.clone())?;
-            Ok(new_num)
-        }
-        _ => Err(RuntimeError::TypeError(String::from(
-            "operator: '++' is only compatible with numbers.",
-        ))),
-    }
-}
-
-fn evaluate_decrement(
-    operand: &Expression,
-    environment: &mut Environment,
-) -> Result<Value, RuntimeError> {
-    match operand {
-        Expression::Identifier(name) => {
-            let num = environment
-                .get(name)
-                .ok_or(RuntimeError::UndefinedVariable(name.clone()))?;
-            let Value::Number(n) = num else {
-                return Err(RuntimeError::TypeError(String::from(
-                    "operator: '--' is only compatible with numbers.",
-                )));
-            };
-            let new_num = Value::Number(decrement_number(*n)?);
-            environment.assign(name, new_num.clone())?;
-            Ok(new_num)
-        }
-        _ => Err(RuntimeError::TypeError(String::from(
-            "operator: '--' is only compatible with numbers.",
-        ))),
-    }
-}
-
-fn evaluate_not_operator(operand: &Value) -> Result<Value, RuntimeError> {
-    match operand {
-        Value::Bool(b) => Ok(Value::Bool(!b)),
-        _ => Err(RuntimeError::TypeError(String::from(
-            "operator: '!' is only compatible with booleans.",
-        ))),
-    }
-}
-
-fn evaluate_unary_minus(operand: &Value) -> Result<Value, RuntimeError> {
-    match operand {
-        Value::Number(num) => Ok(Value::Number(negate_number(*num)?)),
-        _ => Err(RuntimeError::TypeError(String::from(
-            "operator: '-' is only compatible with numbers.",
-        ))),
-    }
-}
-
-fn add_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
-    match (&left, &right) {
-        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left + right)),
-        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left + right)),
-        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left + right)),
-        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left + right)),
-
-        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left + right)),
-        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left + right)),
-        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left + right)),
-        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left + right)),
-
-        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left + right)),
-        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left + right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            Value::Number(left),
-            TokenType::Plus,
-            Value::Number(right),
-        )),
-    }
-}
-
-fn subtract_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
-    match (&left, &right) {
-        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left - right)),
-        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left - right)),
-        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left - right)),
-        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left - right)),
-
-        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left - right)),
-        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left - right)),
-        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left - right)),
-        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left - right)),
-
-        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left - right)),
-        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left - right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            Value::Number(left),
-            TokenType::Minus,
-            Value::Number(right),
-        )),
-    }
-}
-
-fn multiply_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
-    match (&left, &right) {
-        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left * right)),
-        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left * right)),
-        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left * right)),
-        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left * right)),
-
-        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left * right)),
-        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left * right)),
-        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left * right)),
-        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left * right)),
-
-        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left * right)),
-        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left * right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            Value::Number(left),
-            TokenType::Asterisk,
-            Value::Number(right),
-        )),
-    }
-}
-
-fn divide_numbers(left: Number, right: Number) -> Result<Number, RuntimeError> {
-    match (&left, &right) {
-        (Number::I8(left), Number::I8(right)) => Ok(Number::I8(left / right)),
-        (Number::I16(left), Number::I16(right)) => Ok(Number::I16(left / right)),
-        (Number::I32(left), Number::I32(right)) => Ok(Number::I32(left / right)),
-        (Number::I64(left), Number::I64(right)) => Ok(Number::I64(left / right)),
-
-        (Number::U8(left), Number::U8(right)) => Ok(Number::U8(left / right)),
-        (Number::U16(left), Number::U16(right)) => Ok(Number::U16(left / right)),
-        (Number::U32(left), Number::U32(right)) => Ok(Number::U32(left / right)),
-        (Number::U64(left), Number::U64(right)) => Ok(Number::U64(left / right)),
-
-        (Number::F32(left), Number::F32(right)) => Ok(Number::F32(left / right)),
-        (Number::F64(left), Number::F64(right)) => Ok(Number::F64(left / right)),
-        _ => Err(RuntimeError::BinOpTypeError(
-            Value::Number(left),
-            TokenType::Slash,
-            Value::Number(right),
-        )),
-    }
-}
-
-fn negate_number(number: Number) -> Result<Number, RuntimeError> {
-    match number {
-        Number::I8(n) => Ok(Number::I8(-n)),
-        Number::I16(n) => Ok(Number::I16(-n)),
-        Number::I32(n) => Ok(Number::I32(-n)),
-        Number::I64(n) => Ok(Number::I64(-n)),
-        Number::F32(n) => Ok(Number::F32(-n)),
-        Number::F64(n) => Ok(Number::F64(-n)),
-        Number::U8(_) | Number::U16(_) | Number::U32(_) | Number::U64(_) => Err(
-            RuntimeError::TypeError(String::from("Cannot negate unsigned numbers")),
+        TokenType::Not => evaluate_not_operator(&evaluate_expression(operand, environment)),
+        TokenType::Minus => evaluate_unary_minus(&evaluate_expression(operand, environment)),
+        _ => unreachable!(
+            "semantic analyser missed unknown unary operator: {}",
+            operator
         ),
     }
 }
 
-fn increment_number(number: Number) -> Result<Number, RuntimeError> {
-    match number {
-        Number::I8(n) => Ok(Number::I8(n + 1)),
-        Number::I16(n) => Ok(Number::I16(n + 1)),
-        Number::I32(n) => Ok(Number::I32(n + 1)),
-        Number::I64(n) => Ok(Number::I64(n + 1)),
-
-        Number::U8(n) => Ok(Number::U8(n + 1)),
-        Number::U16(n) => Ok(Number::U16(n + 1)),
-        Number::U32(n) => Ok(Number::U32(n + 1)),
-        Number::U64(n) => Ok(Number::U64(n + 1)),
-
-        Number::F32(n) => Ok(Number::F32(n + 1.0)),
-        Number::F64(n) => Ok(Number::F64(n + 1.0)),
+fn evaluate_plus(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Value::Number(add_numbers(*left, *right)),
+        (Value::String(left), Value::String(right)) => Value::String(left.to_owned() + right),
+        _ => unreachable!(
+            "type checker did not catch incorrect + operands: {:?} & {:?}",
+            left, right
+        ),
     }
 }
 
-fn decrement_number(number: Number) -> Result<Number, RuntimeError> {
+fn evaluate_minus(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            Value::Number(subtract_numbers(*left, *right))
+        }
+        _ => unreachable!(
+            "type checker did not catch incorrect - operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_multiply(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            Value::Number(multiply_numbers(*left, *right))
+        }
+        _ => unreachable!(
+            "type checker did not catch incorrect * operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_divide(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            Value::Number(divide_numbers(*left, *right)) // will panic on x / 0
+        }
+        _ => unreachable!(
+            "type checker did not catch incorrect / operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_greater_than(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Value::Bool(left > right),
+        _ => unreachable!(
+            "type checker did not catch incorrect > operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_greater_than_or_equal_to(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Value::Bool(left >= right),
+        _ => unreachable!(
+            "type checker did not catch incorrect >= operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_less_than(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Value::Bool(left < right),
+        _ => unreachable!(
+            "type checker did not catch incorrect < operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_less_than_or_equal_to(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Value::Bool(left <= right),
+        _ => unreachable!(
+            "type checker did not catch incorrect <= operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_equal_to(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Value::Bool(left == right),
+        (Value::Bool(left), Value::Bool(right)) => Value::Bool(left == right),
+        (Value::String(left), Value::String(right)) => Value::Bool(left == right),
+        _ => unreachable!(
+            "type checker did not catch incorrect == operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_not_equal_to(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => Value::Bool(left != right),
+        (Value::Bool(left), Value::Bool(right)) => Value::Bool(left != right),
+        (Value::String(left), Value::String(right)) => Value::Bool(left == right),
+        _ => unreachable!(
+            "type checker did not catch incorrect != operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_logical_and(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Bool(left), Value::Bool(right)) => Value::Bool(*left && *right),
+        _ => unreachable!(
+            "type checker did not catch incorrect && operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_logical_or(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Bool(left), Value::Bool(right)) => Value::Bool(*left || *right),
+        _ => unreachable!(
+            "type checker did not catch incorrect || operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn evaluate_increment(operand: &Expression, environment: &mut Environment) -> Value {
+    match operand {
+        Expression::Identifier(name) => {
+            let num = environment.get(name);
+            let Value::Number(n) = num else {
+                unreachable!("type checker did not catch incorrect ++ operand: {:?}", num)
+            };
+            let new_num = Value::Number(increment_number(*n));
+            environment.assign(name, new_num.clone());
+            new_num
+        }
+        _ => unreachable!("type checker did not catch non-identifier ++ operand"),
+    }
+}
+
+fn evaluate_decrement(operand: &Expression, environment: &mut Environment) -> Value {
+    match operand {
+        Expression::Identifier(name) => {
+            let num = environment.get(name);
+            let Value::Number(n) = num else {
+                unreachable!("type checker did not catch incorrect -- operand: {:?}", num)
+            };
+            let new_num = Value::Number(decrement_number(*n));
+            environment.assign(name, new_num.clone());
+            new_num
+        }
+        _ => unreachable!("type checker did not catch non-identifier -- operand"),
+    }
+}
+
+fn evaluate_not_operator(operand: &Value) -> Value {
+    match operand {
+        Value::Bool(b) => Value::Bool(!b),
+        _ => unreachable!(
+            "type checker did not catch incorrect ! operand: {:?}",
+            operand
+        ),
+    }
+}
+
+fn evaluate_unary_minus(operand: &Value) -> Value {
+    match operand {
+        Value::Number(num) => Value::Number(negate_number(*num)),
+        _ => unreachable!(
+            "type checker did not catch incorrect unary - operand: {:?}",
+            operand
+        ),
+    }
+}
+
+fn add_numbers(left: Number, right: Number) -> Number {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Number::I8(left + right),
+        (Number::I16(left), Number::I16(right)) => Number::I16(left + right),
+        (Number::I32(left), Number::I32(right)) => Number::I32(left + right),
+        (Number::I64(left), Number::I64(right)) => Number::I64(left + right),
+
+        (Number::U8(left), Number::U8(right)) => Number::U8(left + right),
+        (Number::U16(left), Number::U16(right)) => Number::U16(left + right),
+        (Number::U32(left), Number::U32(right)) => Number::U32(left + right),
+        (Number::U64(left), Number::U64(right)) => Number::U64(left + right),
+
+        (Number::F32(left), Number::F32(right)) => Number::F32(left + right),
+        (Number::F64(left), Number::F64(right)) => Number::F64(left + right),
+        _ => unreachable!(
+            "type checker did not catch invalid + operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn subtract_numbers(left: Number, right: Number) -> Number {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Number::I8(left - right),
+        (Number::I16(left), Number::I16(right)) => Number::I16(left - right),
+        (Number::I32(left), Number::I32(right)) => Number::I32(left - right),
+        (Number::I64(left), Number::I64(right)) => Number::I64(left - right),
+
+        (Number::U8(left), Number::U8(right)) => Number::U8(left - right),
+        (Number::U16(left), Number::U16(right)) => Number::U16(left - right),
+        (Number::U32(left), Number::U32(right)) => Number::U32(left - right),
+        (Number::U64(left), Number::U64(right)) => Number::U64(left - right),
+
+        (Number::F32(left), Number::F32(right)) => Number::F32(left - right),
+        (Number::F64(left), Number::F64(right)) => Number::F64(left - right),
+        _ => unreachable!(
+            "type checker did not catch incorrect - operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn multiply_numbers(left: Number, right: Number) -> Number {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Number::I8(left * right),
+        (Number::I16(left), Number::I16(right)) => Number::I16(left * right),
+        (Number::I32(left), Number::I32(right)) => Number::I32(left * right),
+        (Number::I64(left), Number::I64(right)) => Number::I64(left * right),
+
+        (Number::U8(left), Number::U8(right)) => Number::U8(left * right),
+        (Number::U16(left), Number::U16(right)) => Number::U16(left * right),
+        (Number::U32(left), Number::U32(right)) => Number::U32(left * right),
+        (Number::U64(left), Number::U64(right)) => Number::U64(left * right),
+
+        (Number::F32(left), Number::F32(right)) => Number::F32(left * right),
+        (Number::F64(left), Number::F64(right)) => Number::F64(left * right),
+        _ => unreachable!(
+            "type checker did not catch incorrect * operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn divide_numbers(left: Number, right: Number) -> Number {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Number::I8(left / right),
+        (Number::I16(left), Number::I16(right)) => Number::I16(left / right),
+        (Number::I32(left), Number::I32(right)) => Number::I32(left / right),
+        (Number::I64(left), Number::I64(right)) => Number::I64(left / right),
+
+        (Number::U8(left), Number::U8(right)) => Number::U8(left / right),
+        (Number::U16(left), Number::U16(right)) => Number::U16(left / right),
+        (Number::U32(left), Number::U32(right)) => Number::U32(left / right),
+        (Number::U64(left), Number::U64(right)) => Number::U64(left / right),
+
+        (Number::F32(left), Number::F32(right)) => Number::F32(left / right),
+        (Number::F64(left), Number::F64(right)) => Number::F64(left / right),
+        _ => unreachable!(
+            "type checker did not catch incorrect + operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+fn negate_number(number: Number) -> Number {
     match number {
-        Number::I8(n) => Ok(Number::I8(n - 1)),
-        Number::I16(n) => Ok(Number::I16(n - 1)),
-        Number::I32(n) => Ok(Number::I32(n - 1)),
-        Number::I64(n) => Ok(Number::I64(n - 1)),
+        Number::I8(n) => Number::I8(-n),
+        Number::I16(n) => Number::I16(-n),
+        Number::I32(n) => Number::I32(-n),
+        Number::I64(n) => Number::I64(-n),
+        Number::F32(n) => Number::F32(-n),
+        Number::F64(n) => Number::F64(-n),
+        _ => unreachable!(
+            "type checker did not catch incorrect unary - operand: {:?}",
+            number
+        ),
+    }
+}
 
-        Number::U8(n) => Ok(Number::U8(n - 1)),
-        Number::U16(n) => Ok(Number::U16(n - 1)),
-        Number::U32(n) => Ok(Number::U32(n - 1)),
-        Number::U64(n) => Ok(Number::U64(n - 1)),
+fn increment_number(number: Number) -> Number {
+    match number {
+        Number::I8(n) => Number::I8(n + 1),
+        Number::I16(n) => Number::I16(n + 1),
+        Number::I32(n) => Number::I32(n + 1),
+        Number::I64(n) => Number::I64(n + 1),
 
-        Number::F32(n) => Ok(Number::F32(n - 1.0)),
-        Number::F64(n) => Ok(Number::F64(n - 1.0)),
+        Number::U8(n) => Number::U8(n + 1),
+        Number::U16(n) => Number::U16(n + 1),
+        Number::U32(n) => Number::U32(n + 1),
+        Number::U64(n) => Number::U64(n + 1),
+
+        Number::F32(n) => Number::F32(n + 1.0),
+        Number::F64(n) => Number::F64(n + 1.0),
+
+        _ => unreachable!(
+            "type checker did not catch incorrect ++ operand: {:?}",
+            number
+        ),
+    }
+}
+
+fn decrement_number(number: Number) -> Number {
+    match number {
+        Number::I8(n) => Number::I8(n - 1),
+        Number::I16(n) => Number::I16(n - 1),
+        Number::I32(n) => Number::I32(n - 1),
+        Number::I64(n) => Number::I64(n - 1),
+
+        Number::U8(n) => Number::U8(n - 1),
+        Number::U16(n) => Number::U16(n - 1),
+        Number::U32(n) => Number::U32(n - 1),
+        Number::U64(n) => Number::U64(n - 1),
+
+        Number::F32(n) => Number::F32(n - 1.0),
+        Number::F64(n) => Number::F64(n - 1.0),
+
+        _ => unreachable!(
+            "type checker did not catch incorrect -- operand: {:?}",
+            number
+        ),
     }
 }
