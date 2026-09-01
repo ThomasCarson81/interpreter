@@ -1,3 +1,5 @@
+use std::time::{self, UNIX_EPOCH};
+
 use syntax::{
     functions::{BuiltinId, Function, FunctionImplementation},
     types::{Number, Type, Value},
@@ -42,6 +44,13 @@ pub fn execute_builtin(function: &Function, arguments: Vec<Value>) -> Value {
                 Value::Number(n) => Value::Number(convert_number(n, *target_type)),
                 _ => unreachable!("semantic analyser allowed invalid argument to to_num"),
             }
+        }
+        FunctionImplementation::Builtin(BuiltinId::Time) => {
+            let current_time = time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("System time went backwards!")
+                .as_secs_f64();
+            return Value::Number(Number::F64(current_time));
         }
     }
 }
