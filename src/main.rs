@@ -695,6 +695,14 @@ fn call_function(
             };
             Value::String(number.to_string())
         }
+        FunctionImplementation::Builtin(BuiltinId::Input) => {
+            let response = match arguments.as_slice() {
+                [] => prompted::input!(),
+                [Value::String(message)] => prompted::input!("{}", message),
+                _ => unreachable!("semantic analyser missed input's string argument"),
+            };
+            Value::String(response)
+        }
     }
 }
 
