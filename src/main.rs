@@ -689,6 +689,12 @@ fn call_function(
             }
             Value::Unit
         }
+        FunctionImplementation::Builtin(BuiltinId::ToString) => {
+            let [Value::Number(number)] = arguments.as_slice() else {
+                unreachable!("semantic analyser missed to_string's numeric argument");
+            };
+            Value::String(number.to_string())
+        }
     }
 }
 
@@ -768,5 +774,46 @@ mod tests {
             environment.get("counter"),
             Value::Number(Number::I32(3))
         ));
+    }
+
+    #[test]
+    fn numeric_to_string_builtin_formats_each_number_type() {
+        let function = Function {
+            id: FunctionId(0),
+            signature: FunctionSignature {
+                name: "to_string".into(),
+                parameters: vec![Type::I32],
+                return_type: Type::String,
+            },
+            parameters: vec![FunctionParameter {
+                name: "value".into(),
+                param_type: Type::I32,
+            }],
+            implementation: FunctionImplementation::Builtin(BuiltinId::ToString),
+        };
+        let values = [
+            Value::Number(Number::I8(-1)),
+            Value::Number(Number::I16(-2)),
+            Value::Number(Number::I32(-3)),
+            Value::Number(Number::I64(-4)),
+            Value::Number(Number::U8(5)),
+            Value::Number(Number::U16(6)),
+            Value::Number(Number::U32(7)),
+            Value::Number(Number::U64(8)),
+            Value::Number(Number::F32(1.5)),
+            Value::Number(Number::F64(2.5)),
+        ];
+        let expected = ["-1", "-2", "-3", "-4", "5", "6", "7", "8", "1.5", "2.5"];
+        let mut environment = Environment {
+            scopes: vec![HashMap::new()],
+            function_table: FunctionTable { functions: vec![] },
+        };
+
+        for (value, expected) in values.into_iter().zip(expected) {
+            assert!(matches!(
+                call_function(&function, vec![value], &mut environment),
+                Value::String(ref actual) if actual == expected
+            ));
+        }
     }
 }
