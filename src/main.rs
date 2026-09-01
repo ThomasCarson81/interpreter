@@ -1,9 +1,11 @@
 use std::{collections::HashMap, env, time};
 use syntax::{
     ast::{Expression, Statement, TokenType},
-    functions::{BuiltinId, CheckedProgram, Function, FunctionImplementation, FunctionTable},
-    types::{Number, Type, Value},
+    functions::{CheckedProgram, Function, FunctionImplementation, FunctionTable},
+    types::{Number, Value},
 };
+mod builtins;
+
 #[derive(Debug)]
 enum InterpreterError {
     CouldNotReadFile(String),
@@ -670,78 +672,7 @@ fn call_function(
             environment.pop_scope();
             result
         }
-        FunctionImplementation::Builtin(BuiltinId::Print) => {
-            for argument in arguments {
-                print!("{argument}");
-            }
-            Value::Unit
-        }
-        FunctionImplementation::Builtin(BuiltinId::Println) => {
-            for argument in arguments {
-                println!("{argument}");
-            }
-            Value::Unit
-        }
-        FunctionImplementation::Builtin(BuiltinId::ToString) => {
-            let [Value::Number(number)] = arguments.as_slice() else {
-                unreachable!("semantic analyser missed to_string's numeric argument");
-            };
-            Value::String(number.to_string())
-        }
-        FunctionImplementation::Builtin(BuiltinId::Input) => {
-            let response = match arguments.as_slice() {
-                [] => prompted::input!(),
-                [Value::String(message)] => prompted::input!("{}", message),
-                _ => unreachable!("semantic analyser missed input's string argument"),
-            };
-            Value::String(response)
-        }
-        FunctionImplementation::Builtin(BuiltinId::ToNum(target_type)) => {
-            let [value] = arguments.as_slice() else {
-                unreachable!("semantic analyser missed to_num argument");
-            };
-
-            match value {
-                Value::String(s) => Value::Number(parse_number(s, *target_type)),
-                Value::Number(n) => Value::Number(convert_number(n, *target_type)),
-                _ => unreachable!("semantic analyser allowed invalid argument to to_num"),
-            }
-        }
-    }
-}
-
-fn parse_number(string: &str, target: Type) -> Number {
-    match target {
-        Type::I8 => Number::I8(string.parse().expect("failed to parse number")),
-        Type::I16 => Number::I16(string.parse().expect("failed to parse number")),
-        Type::I32 => Number::I32(string.parse().expect("failed to parse number")),
-        Type::I64 => Number::I64(string.parse().expect("failed to parse number")),
-
-        Type::U8 => Number::U8(string.parse().expect("failed to parse number")),
-        Type::U16 => Number::U16(string.parse().expect("failed to parse number")),
-        Type::U32 => Number::U32(string.parse().expect("failed to parse number")),
-        Type::U64 => Number::U64(string.parse().expect("failed to parse number")),
-
-        Type::F32 => Number::F32(string.parse().expect("failed to parse number")),
-        Type::F64 => Number::F64(string.parse().expect("failed to parse number")),
-
-        _ => unreachable!("to_num target must be numeric"),
-    }
-}
-
-fn convert_number(number: &Number, target: Type) -> Number {
-    match number {
-        Number::I8(n) => parse_number(&n.to_string(), target),
-        Number::I16(n) => parse_number(&n.to_string(), target),
-        Number::I32(n) => parse_number(&n.to_string(), target),
-        Number::I64(n) => parse_number(&n.to_string(), target),
-        Number::U8(n) => parse_number(&n.to_string(), target),
-        Number::U16(n) => parse_number(&n.to_string(), target),
-        Number::U32(n) => parse_number(&n.to_string(), target),
-        Number::U64(n) => parse_number(&n.to_string(), target),
-        Number::F32(n) => parse_number(&n.to_string(), target),
-        Number::F64(n) => parse_number(&n.to_string(), target),
-        _ => unreachable!(),
+        _ => builtins::execute_builtin(function, arguments),
     }
 }
 
@@ -749,7 +680,7 @@ fn convert_number(number: &Number, target: Type) -> Number {
 mod tests {
     use super::*;
     use syntax::{
-        functions::{FunctionBody, FunctionId, FunctionParameter, FunctionSignature},
+        functions::{BuiltinId, FunctionBody, FunctionId, FunctionParameter, FunctionSignature},
         types::Type,
     };
 
