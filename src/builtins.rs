@@ -1,21 +1,21 @@
 use crate::Environment;
 use prompted::input;
-use syntax::{Number, Value};
+use syntax::types::{Number, Value};
 
 pub fn register_all(environment: &mut Environment) {
-    environment.define_builtin_func(String::from("print"), builtin_print);
-    environment.define_builtin_func(String::from("println"), builtin_println);
-    environment.define_builtin_func(String::from("input"), cmd_input);
-    environment.define_builtin_func(String::from("as_i8"), as_i8);
-    environment.define_builtin_func(String::from("as_i16"), as_i16);
-    environment.define_builtin_func(String::from("as_i32"), as_i32);
-    environment.define_builtin_func(String::from("as_i64"), as_i64);
-    environment.define_builtin_func(String::from("as_u8"), as_u8);
-    environment.define_builtin_func(String::from("as_u16"), as_u16);
-    environment.define_builtin_func(String::from("as_u32"), as_u32);
-    environment.define_builtin_func(String::from("as_u64"), as_u64);
-    environment.define_builtin_func(String::from("as_f32"), as_f32);
-    environment.define_builtin_func(String::from("as_f64"), as_f64);
+    //     environment.define_builtin_func(String::from("print"), builtin_print);
+    //     environment.define_builtin_func(String::from("println"), builtin_println);
+    //     environment.define_builtin_func(String::from("input"), cmd_input);
+    //     environment.define_builtin_func(String::from("as_i8"), as_i8);
+    //     environment.define_builtin_func(String::from("as_i16"), as_i16);
+    //     environment.define_builtin_func(String::from("as_i32"), as_i32);
+    //     environment.define_builtin_func(String::from("as_i64"), as_i64);
+    //     environment.define_builtin_func(String::from("as_u8"), as_u8);
+    //     environment.define_builtin_func(String::from("as_u16"), as_u16);
+    //     environment.define_builtin_func(String::from("as_u32"), as_u32);
+    //     environment.define_builtin_func(String::from("as_u64"), as_u64);
+    //     environment.define_builtin_func(String::from("as_f32"), as_f32);
+    //     environment.define_builtin_func(String::from("as_f64"), as_f64);
 }
 
 fn builtin_print(args: Vec<Value>, _environment: &mut Environment) -> Value {

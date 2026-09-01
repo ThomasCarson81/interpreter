@@ -1,5 +1,10 @@
 use std::{collections::HashMap, env, time};
-use syntax::{Expression, FunctionParameter, Number, Program, Statement, TokenType, Value};
+use syntax::{
+    ast::{Expression, Program, Statement, TokenType},
+    functions::{Function, FunctionImplementation, FunctionTable},
+    stdlib::builtin_functions,
+    types::{Number, Value},
+};
 mod builtins;
 #[derive(Debug)]
 enum InterpreterError {
@@ -16,55 +21,54 @@ enum ControlFlow {
 
 type BuiltInFunction = fn(Vec<Value>, &mut Environment) -> Value;
 
-#[derive(Clone)]
-enum Function {
-    UserDefined {
-        parameters: Vec<FunctionParameter>,
-        body: Vec<Statement>,
-    },
-    BuiltIn {
-        function: BuiltInFunction,
-    },
-}
-impl Function {
-    fn call(&self, arguments: Vec<Value>, environment: &mut Environment) -> Value {
-        match self {
-            Function::UserDefined { parameters, body } => {
-                let num_params = parameters.len();
-                let num_args = arguments.len();
-                if num_params != num_args {
-                    unreachable!("semantic analyser missed argument count mismatch");
-                }
-                environment.push_scope();
-                for (parameter, argument) in parameters.iter().zip(arguments) {
-                    environment.define(parameter.name.clone(), argument);
-                }
-                match execute_block(&body, environment) {
-                    ControlFlow::Normal => {}
-                    ControlFlow::Return(value) => {
-                        environment.pop_scope();
-                        return value;
-                    }
-                    ControlFlow::Break => {
-                        environment.pop_scope();
-                        unreachable!("illegal control flow: break");
-                    }
-                    ControlFlow::Continue => {
-                        environment.pop_scope();
-                        unreachable!("illegal control flow: continue");
-                    }
-                }
-                environment.pop_scope();
-                Value::Unit
-            }
-            Function::BuiltIn { function, .. } => function(arguments, environment),
-        }
-    }
-}
+// #[derive(Clone)]
+// enum Function {
+//     UserDefined {
+//         parameters: Vec<FunctionParameter>,
+//         body: Vec<Statement>,
+//     },
+//     BuiltIn {
+//         function: BuiltInFunction,
+//     },
+// }
+// impl Function {
+//     fn call(&self, arguments: Vec<Value>, environment: &mut Environment) -> Value {
+//         match self {
+//             Function::UserDefined { parameters, body } => {
+//                 let num_params = parameters.len();
+//                 let num_args = arguments.len();
+//                 if num_params != num_args {
+//                     unreachable!("semantic analyser missed argument count mismatch");
+//                 }
+//                 environment.push_scope();
+//                 for (parameter, argument) in parameters.iter().zip(arguments) {
+//                     environment.define(parameter.name.clone(), argument);
+//                 }
+//                 match execute_block(&body, environment) {
+//                     ControlFlow::Normal => {}
+//                     ControlFlow::Return(value) => {
+//                         environment.pop_scope();
+//                         return value;
+//                     }
+//                     ControlFlow::Break => {
+//                         environment.pop_scope();
+//                         unreachable!("illegal control flow: break");
+//                     }
+//                     ControlFlow::Continue => {
+//                         environment.pop_scope();
+//                         unreachable!("illegal control flow: continue");
+//                     }
+//                 }
+//                 environment.pop_scope();
+//                 Value::Unit
+//             }
+//             Function::BuiltIn { function, .. } => function(arguments, environment),
+//         }
+//     }
+// }
 
 struct Environment {
     scopes: Vec<HashMap<String, Value>>,
-    functions: HashMap<String, Function>,
 }
 impl Environment {
     fn push_scope(&mut self) {
@@ -100,23 +104,6 @@ impl Environment {
         }
         unreachable!("name resolver missed undeclared variable in assignment")
     }
-
-    fn define_func(&mut self, name: String, value: Function) {
-        self.functions.insert(name, value);
-    }
-
-    fn define_builtin_func(&mut self, name: String, function: BuiltInFunction) {
-        self.functions
-            .insert(name.clone(), Function::BuiltIn { function });
-    }
-
-    fn call_func(&mut self, name: String, arguments: Vec<Value>) -> Value {
-        self.functions
-            .get(&name)
-            .expect("name resolver missed undefined function")
-            .clone()
-            .call(arguments, self)
-    }
 }
 
 fn main() {
@@ -137,11 +124,14 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let mut environment = Environment {
-        scopes: Vec::new(),
-        functions: HashMap::new(),
+
+    // get functiontable from file
+    let function_table = FunctionTable {
+        functions: builtin_functions(),
     };
-    builtins::register_all(&mut environment);
+
+    let mut environment = Environment { scopes: Vec::new() };
+    // builtins::register_all(&mut environment);
     environment.push_scope();
     let start_time = time::Instant::now();
     execute_program(&program, &mut environment);
@@ -283,16 +273,17 @@ fn execute_statement(statement: &Statement, environment: &mut Environment) -> Co
             return execute_block(body, environment);
         }
         Statement::FunctionDefinition {
-            identifier,
+            identifier: _,
             parameters,
             body,
             return_type: _,
         } => {
-            let func = Function::UserDefined {
-                parameters: parameters.clone(),
-                body: body.clone(),
-            };
-            environment.define_func(identifier.clone(), func);
+            // let _func = Function::UserDefined {
+            //     parameters: parameters.clone(),
+            //     body: body.clone(),
+            // };
+            // environment.define_func(identifier.clone(), func);
+            todo!("run main() instead of interpreting full ast");
         }
         Statement::ExpressionStatement { expression } => {
             evaluate_expression(expression, environment);
@@ -329,16 +320,26 @@ fn evaluate_expression(expression: &Expression, environment: &mut Environment) -
         Expression::UnaryOp { operator, operand } => {
             evaluate_unary_operator(operand, operator, environment)
         }
-        Expression::FunctionCall {
-            identifier,
+        Expression::ResolvedFunctionCall {
+            function_id,
             arguments,
         } => {
-            let args = arguments
-                .iter()
-                .map(|arg| evaluate_expression(arg, environment))
-                .collect();
-            environment.call_func(identifier.clone(), args)
+            // let arguments = arguments
+            //     .iter()
+            //     .map(|expr| evaluate_expression(expr, environment))
+            //     .collect();
+            // let func = environment
+            //     .function_table
+            //     .get(function_id.clone())
+            //     .expect("function table missing function")
+            //     .clone();
+            // call_function(func, arguments, environment)
+            Value::Unit
         }
+        Expression::UnresolvedFunctionCall {
+            identifier,
+            arguments,
+        } => unreachable!("unresolved function call reached interpreter"),
     }
 }
 
@@ -702,4 +703,17 @@ fn decrement_number(number: Number) -> Number {
             number
         ),
     }
+}
+
+fn call_function(
+    function: &Function,
+    arguments: Vec<Value>,
+    environment: &mut Environment,
+) -> Value {
+    match &function.implementation {
+        FunctionImplementation::Oxide(function_body) => {}
+        FunctionImplementation::Builtin(builtin_id) => {}
+    }
+
+    Value::Unit
 }
