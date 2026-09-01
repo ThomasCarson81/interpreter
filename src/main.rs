@@ -1,11 +1,9 @@
 use std::{collections::HashMap, env, time};
 use syntax::{
-    ast::{Expression, Program, Statement, TokenType},
-    functions::{Function, FunctionImplementation, FunctionTable},
-    stdlib::builtin_functions,
+    ast::{Expression, Statement, TokenType},
+    functions::{BuiltinId, CheckedProgram, Function, FunctionImplementation, FunctionTable},
     types::{Number, Value},
 };
-mod builtins;
 #[derive(Debug)]
 enum InterpreterError {
     CouldNotReadFile(String),
@@ -19,56 +17,9 @@ enum ControlFlow {
     Continue,
 }
 
-type BuiltInFunction = fn(Vec<Value>, &mut Environment) -> Value;
-
-// #[derive(Clone)]
-// enum Function {
-//     UserDefined {
-//         parameters: Vec<FunctionParameter>,
-//         body: Vec<Statement>,
-//     },
-//     BuiltIn {
-//         function: BuiltInFunction,
-//     },
-// }
-// impl Function {
-//     fn call(&self, arguments: Vec<Value>, environment: &mut Environment) -> Value {
-//         match self {
-//             Function::UserDefined { parameters, body } => {
-//                 let num_params = parameters.len();
-//                 let num_args = arguments.len();
-//                 if num_params != num_args {
-//                     unreachable!("semantic analyser missed argument count mismatch");
-//                 }
-//                 environment.push_scope();
-//                 for (parameter, argument) in parameters.iter().zip(arguments) {
-//                     environment.define(parameter.name.clone(), argument);
-//                 }
-//                 match execute_block(&body, environment) {
-//                     ControlFlow::Normal => {}
-//                     ControlFlow::Return(value) => {
-//                         environment.pop_scope();
-//                         return value;
-//                     }
-//                     ControlFlow::Break => {
-//                         environment.pop_scope();
-//                         unreachable!("illegal control flow: break");
-//                     }
-//                     ControlFlow::Continue => {
-//                         environment.pop_scope();
-//                         unreachable!("illegal control flow: continue");
-//                     }
-//                 }
-//                 environment.pop_scope();
-//                 Value::Unit
-//             }
-//             Function::BuiltIn { function, .. } => function(arguments, environment),
-//         }
-//     }
-// }
-
 struct Environment {
     scopes: Vec<HashMap<String, Value>>,
+    function_table: FunctionTable,
 }
 impl Environment {
     fn push_scope(&mut self) {
@@ -113,7 +64,7 @@ fn main() {
         return;
     }
 
-    let program = match get_ast_from_file(&args[1]) {
+    let checked_program = match get_checked_program_from_file(&args[1]) {
         Ok(ast) => ast,
         Err(e) => {
             match e {
@@ -125,16 +76,13 @@ fn main() {
         }
     };
 
-    // get functiontable from file
-    let function_table = FunctionTable {
-        functions: builtin_functions(),
+    let mut environment = Environment {
+        scopes: Vec::new(),
+        function_table: checked_program.function_table.clone(),
     };
-
-    let mut environment = Environment { scopes: Vec::new() };
-    // builtins::register_all(&mut environment);
     environment.push_scope();
     let start_time = time::Instant::now();
-    execute_program(&program, &mut environment);
+    execute_checked_program(&checked_program, &mut environment);
     let end_time = time::Instant::now();
     let total_time = end_time - start_time;
 
@@ -148,18 +96,28 @@ fn main() {
     }
 }
 
-fn get_ast_from_file(file_path: &str) -> Result<Program, InterpreterError> {
+fn get_checked_program_from_file(file_path: &str) -> Result<CheckedProgram, InterpreterError> {
     let ast = std::fs::read_to_string(&file_path)
         .map_err(|e| InterpreterError::CouldNotReadFile(e.to_string()))?;
-    let program: Program = serde_json::from_str(&ast)
+    let program: CheckedProgram = serde_json::from_str(&ast)
         .map_err(|e| InterpreterError::CouldNotReadFile(e.to_string()))?;
     Ok(program)
 }
 
-fn execute_program(program: &Program, environment: &mut Environment) {
-    for statement in &program.statements {
-        execute_statement(statement, environment);
+fn execute_checked_program(program: &CheckedProgram, environment: &mut Environment) {
+    for statement in &program.globals {
+        match execute_statement(statement, environment) {
+            ControlFlow::Normal => {}
+            _ => unreachable!("checked globals may not contain control-flow statements"),
+        }
     }
+
+    let main = environment
+        .function_table
+        .get(program.main_function_id.clone())
+        .expect("checked program main function is missing from the function table")
+        .clone();
+    let _ = call_function(&main, Vec::new(), environment);
 }
 
 fn execute_block(block: &Vec<Statement>, environment: &mut Environment) -> ControlFlow {
@@ -272,18 +230,8 @@ fn execute_statement(statement: &Statement, environment: &mut Environment) -> Co
         Statement::Scope { body } => {
             return execute_block(body, environment);
         }
-        Statement::FunctionDefinition {
-            identifier: _,
-            parameters,
-            body,
-            return_type: _,
-        } => {
-            // let _func = Function::UserDefined {
-            //     parameters: parameters.clone(),
-            //     body: body.clone(),
-            // };
-            // environment.define_func(identifier.clone(), func);
-            todo!("run main() instead of interpreting full ast");
+        Statement::FunctionDefinition { .. } => {
+            unreachable!("function definitions belong in the checked function table")
         }
         Statement::ExpressionStatement { expression } => {
             evaluate_expression(expression, environment);
@@ -324,22 +272,20 @@ fn evaluate_expression(expression: &Expression, environment: &mut Environment) -
             function_id,
             arguments,
         } => {
-            // let arguments = arguments
-            //     .iter()
-            //     .map(|expr| evaluate_expression(expr, environment))
-            //     .collect();
-            // let func = environment
-            //     .function_table
-            //     .get(function_id.clone())
-            //     .expect("function table missing function")
-            //     .clone();
-            // call_function(func, arguments, environment)
-            Value::Unit
+            let arguments = arguments
+                .iter()
+                .map(|argument| evaluate_expression(argument, environment))
+                .collect();
+            let function = environment
+                .function_table
+                .get(function_id.clone())
+                .expect("checked program function is missing from the function table")
+                .clone();
+            call_function(&function, arguments, environment)
         }
-        Expression::UnresolvedFunctionCall {
-            identifier,
-            arguments,
-        } => unreachable!("unresolved function call reached interpreter"),
+        Expression::UnresolvedFunctionCall { .. } => {
+            unreachable!("unresolved function call reached interpreter")
+        }
     }
 }
 
@@ -711,9 +657,116 @@ fn call_function(
     environment: &mut Environment,
 ) -> Value {
     match &function.implementation {
-        FunctionImplementation::Oxide(function_body) => {}
-        FunctionImplementation::Builtin(builtin_id) => {}
+        FunctionImplementation::Oxide(function_body) => {
+            if function.parameters.len() != arguments.len() {
+                unreachable!("semantic analyser missed argument count mismatch");
+            }
+
+            environment.push_scope();
+            for (parameter, argument) in function.parameters.iter().zip(arguments) {
+                environment.define(parameter.name.clone(), argument);
+            }
+            let result = match execute_block(&function_body.statements, environment) {
+                ControlFlow::Normal => Value::Unit,
+                ControlFlow::Return(value) => value,
+                ControlFlow::Break => unreachable!("context checker missed break outside a loop"),
+                ControlFlow::Continue => {
+                    unreachable!("context checker missed continue outside a loop")
+                }
+            };
+            environment.pop_scope();
+            result
+        }
+        FunctionImplementation::Builtin(BuiltinId::Print) => {
+            for argument in arguments {
+                print!("{argument}");
+            }
+            Value::Unit
+        }
+        FunctionImplementation::Builtin(BuiltinId::Println) => {
+            for argument in arguments {
+                println!("{argument}");
+            }
+            Value::Unit
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syntax::{
+        functions::{FunctionBody, FunctionId, FunctionParameter, FunctionSignature},
+        types::Type,
+    };
+
+    fn i32_literal(value: i32) -> Expression {
+        Expression::Literal(Value::Number(Number::I32(value)))
     }
 
-    Value::Unit
+    #[test]
+    fn runs_globals_then_main_and_resolved_function_calls() {
+        let add_to_counter = Function {
+            id: FunctionId(0),
+            signature: FunctionSignature {
+                name: "add_to_counter".into(),
+                parameters: vec![Type::I32],
+                return_type: Type::I32,
+            },
+            parameters: vec![FunctionParameter {
+                name: "value".into(),
+                param_type: Type::I32,
+            }],
+            implementation: FunctionImplementation::Oxide(FunctionBody {
+                statements: vec![Statement::Return {
+                    value: Some(Expression::BinaryOp {
+                        left: Box::new(Expression::Identifier("counter".into())),
+                        operator: TokenType::Plus,
+                        right: Box::new(Expression::Identifier("value".into())),
+                    }),
+                }],
+            }),
+        };
+        let main = Function {
+            id: FunctionId(1),
+            signature: FunctionSignature {
+                name: "main".into(),
+                parameters: vec![],
+                return_type: Type::Unit,
+            },
+            parameters: vec![],
+            implementation: FunctionImplementation::Oxide(FunctionBody {
+                statements: vec![Statement::Assignment {
+                    identifier: "counter".into(),
+                    expression: Expression::ResolvedFunctionCall {
+                        function_id: FunctionId(0),
+                        arguments: vec![i32_literal(2)],
+                    },
+                }],
+            }),
+        };
+        let checked_program = CheckedProgram {
+            function_table: FunctionTable {
+                functions: vec![add_to_counter, main],
+            },
+            globals: vec![Statement::Let {
+                identifier: "counter".into(),
+                expression: i32_literal(1),
+                mutable: true,
+                var_type: Some(Type::I32),
+            }],
+            main_function_id: FunctionId(1),
+        };
+        let mut environment = Environment {
+            scopes: vec![HashMap::new()],
+            function_table: checked_program.function_table.clone(),
+        };
+
+        execute_checked_program(&checked_program, &mut environment);
+
+        assert!(matches!(
+            environment.get("counter"),
+            Value::Number(Number::I32(3))
+        ));
+    }
 }
