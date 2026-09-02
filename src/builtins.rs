@@ -1,7 +1,8 @@
 use std::time::{self, UNIX_EPOCH};
 
 use syntax::{
-    functions::{BuiltinId, Function, FunctionImplementation},
+    functions::{Function, FunctionImplementation},
+    stdlib::BuiltinId,
     types::{Number, Type, Value},
 };
 
