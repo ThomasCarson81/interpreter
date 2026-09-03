@@ -275,7 +275,10 @@ fn evaluate_expression(expression: &Expression, environment: &mut Environment) -
             let function = environment
                 .function_table
                 .get(function_id.clone())
-                .expect("checked program function is missing from the function table")
+                .expect(&format!(
+                    "checked program function {:?} is missing from the function table",
+                    function_id
+                ))
                 .clone();
             call_function(&function, arguments, environment)
         }
