@@ -93,7 +93,7 @@ fn main() {
 }
 
 fn get_checked_program_from_file(file_path: &str) -> Result<CheckedProgram, InterpreterError> {
-    let ast = std::fs::read_to_string(&file_path)
+    let ast = std::fs::read_to_string(file_path)
         .map_err(|e| InterpreterError::CouldNotReadFile(e.to_string()))?;
     let program: CheckedProgram = serde_json::from_str(&ast)
         .map_err(|e| InterpreterError::CouldNotReadFile(e.to_string()))?;
@@ -256,14 +256,17 @@ fn evaluate_expression(expression: &Expression, environment: &mut Environment) -
             left,
             operator,
             right,
+            inferred_type: _,
         } => {
             let left = evaluate_expression(left, environment);
             let right = evaluate_expression(right, environment);
             operations::evaluate_binary_operator(left, operator, right)
         }
-        Expression::UnaryOp { operator, operand } => {
-            operations::evaluate_unary_operator(operand, operator, environment)
-        }
+        Expression::UnaryOp {
+            operator,
+            operand,
+            inferred_type: _,
+        } => operations::evaluate_unary_operator(operand, operator, environment),
         Expression::ResolvedFunctionCall {
             function_id,
             arguments,
