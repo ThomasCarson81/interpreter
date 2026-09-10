@@ -110,7 +110,7 @@ fn execute_checked_program(program: &CheckedProgram, environment: &mut Environme
 
     let main = environment
         .function_table
-        .get(program.main_function_id.clone())
+        .get(&program.main_function_id)
         .expect("checked program main function is missing from the function table")
         .clone();
     call_function(&main, Vec::new(), environment);
@@ -277,7 +277,7 @@ fn evaluate_expression(expression: &Expression, environment: &mut Environment) -
                 .collect();
             let function = environment
                 .function_table
-                .get(function_id.clone())
+                .get(function_id)
                 .expect(&format!(
                     "checked program function {:?} is missing from the function table",
                     function_id
