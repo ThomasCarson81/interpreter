@@ -196,6 +196,16 @@ pub fn execute_builtin(function: &Function, arguments: Vec<Value>) -> Value {
                 _ => unreachable!("semantic analyser allowed non number types to clamp()"),
             }
         }
+        FunctionImplementation::Builtin(BuiltinId::Sqrt) => {
+            let [Value::Number(number)] = arguments.as_slice() else {
+                unreachable!("semantic analyser missed sqrt's numeric argument");
+            };
+            match number {
+                Number::F32(n) => Value::Number(Number::F32(f32::sqrt(*n))),
+                Number::F64(n) => Value::Number(Number::F64(f64::sqrt(*n))),
+                _ => unreachable!("semantic analyser allowed invalid argument to sqrt()"),
+            }
+        }
     }
 }
 
