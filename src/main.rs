@@ -2,7 +2,7 @@ use std::{collections::HashMap, env, time};
 use syntax::{
     ast::{Expression, Statement},
     functions::{CheckedProgram, Function, FunctionImplementation, FunctionTable},
-    types::Value,
+    types::{ControlFlow, Value},
 };
 mod builtins;
 mod operations;
@@ -10,14 +10,6 @@ mod operations;
 #[derive(Debug)]
 enum InterpreterError {
     CouldNotReadFile(String),
-}
-
-#[derive(Debug)]
-enum ControlFlow {
-    Normal,
-    Return(Value),
-    Break,
-    Continue,
 }
 
 struct Environment {
