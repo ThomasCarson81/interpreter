@@ -19,6 +19,7 @@ pub fn evaluate_binary_operator(
         TokenType::Minus => evaluate_minus(left_value, right_value),
         TokenType::Asterisk => evaluate_multiply(left_value, right_value),
         TokenType::Slash => evaluate_divide(left_value, right_value),
+        TokenType::Modulo => evaluate_modulo(left_value, right_value),
         TokenType::GreaterThan => evaluate_greater_than(left_value, right_value),
         TokenType::LessThan => evaluate_less_than(left_value, right_value),
         TokenType::GreaterThanOrEqualTo => {
@@ -96,6 +97,18 @@ pub fn evaluate_divide(left: Value, right: Value) -> Value {
         }
         _ => unreachable!(
             "type checker did not catch incorrect / operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+pub fn evaluate_modulo(left: Value, right: Value) -> Value {
+    match (&left, &right) {
+        (Value::Number(left), Value::Number(right)) => {
+            Value::Number(modulo_numbers(*left, *right)) // will panic on x % 0
+        }
+        _ => unreachable!(
+            "type checker did not catch incorrect % operands: {:?} & {:?}",
             left, right
         ),
     }
@@ -324,6 +337,28 @@ pub fn divide_numbers(left: Number, right: Number) -> Number {
         (Number::F64(left), Number::F64(right)) => Number::F64(left / right),
         _ => unreachable!(
             "type checker did not catch incorrect + operands: {:?} & {:?}",
+            left, right
+        ),
+    }
+}
+
+pub fn modulo_numbers(left: Number, right: Number) -> Number {
+    match (&left, &right) {
+        (Number::I8(left), Number::I8(right)) => Number::I8(left % right),
+        (Number::I16(left), Number::I16(right)) => Number::I16(left % right),
+        (Number::I32(left), Number::I32(right)) => Number::I32(left % right),
+        (Number::I64(left), Number::I64(right)) => Number::I64(left % right),
+
+        (Number::U8(left), Number::U8(right)) => Number::U8(left % right),
+        (Number::U16(left), Number::U16(right)) => Number::U16(left % right),
+        (Number::U32(left), Number::U32(right)) => Number::U32(left % right),
+        (Number::U64(left), Number::U64(right)) => Number::U64(left % right),
+
+        (Number::F32(left), Number::F32(right)) => Number::F32(left % right),
+        (Number::F64(left), Number::F64(right)) => Number::F64(left % right),
+
+        _ => unreachable!(
+            "type checker did not catch incorrect % operands: {:?} & {:?}",
             left, right
         ),
     }
