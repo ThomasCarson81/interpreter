@@ -6,20 +6,30 @@ use syntax::{
 
 use crate::evaluate_expression;
 
-pub fn evaluate_binary_operator(left: Value, operator: &TokenType, right: Value) -> Value {
+pub fn evaluate_binary_operator(
+    left: &Expression,
+    operator: &TokenType,
+    right: &Expression,
+    environment: &mut Environment,
+) -> Value {
+    let left_value = evaluate_expression(left, environment);
+    let right_value = evaluate_expression(right, environment);
     match operator {
-        TokenType::Plus => evaluate_plus(left, right),
-        TokenType::Minus => evaluate_minus(left, right),
-        TokenType::Asterisk => evaluate_multiply(left, right),
-        TokenType::Slash => evaluate_divide(left, right),
-        TokenType::GreaterThan => evaluate_greater_than(left, right),
-        TokenType::LessThan => evaluate_less_than(left, right),
-        TokenType::GreaterThanOrEqualTo => evaluate_greater_than_or_equal_to(left, right),
-        TokenType::LessThanOrEqualTo => evaluate_less_than_or_equal_to(left, right),
-        TokenType::EqualTo => evaluate_equal_to(left, right),
-        TokenType::NotEqualTo => evaluate_not_equal_to(left, right),
-        TokenType::LogicalOr => evaluate_logical_or(left, right),
-        TokenType::LogicalAnd => evaluate_logical_and(left, right),
+        TokenType::Plus => evaluate_plus(left_value, right_value),
+        TokenType::Minus => evaluate_minus(left_value, right_value),
+        TokenType::Asterisk => evaluate_multiply(left_value, right_value),
+        TokenType::Slash => evaluate_divide(left_value, right_value),
+        TokenType::GreaterThan => evaluate_greater_than(left_value, right_value),
+        TokenType::LessThan => evaluate_less_than(left_value, right_value),
+        TokenType::GreaterThanOrEqualTo => {
+            evaluate_greater_than_or_equal_to(left_value, right_value)
+        }
+        TokenType::LessThanOrEqualTo => evaluate_less_than_or_equal_to(left_value, right_value),
+        TokenType::EqualTo => evaluate_equal_to(left_value, right_value),
+        TokenType::NotEqualTo => evaluate_not_equal_to(left_value, right_value),
+        TokenType::LogicalOr => evaluate_logical_or(left_value, right_value),
+        TokenType::LogicalAnd => evaluate_logical_and(left_value, right_value),
+        TokenType::Walrus => evaluate_walrus(left, right_value, environment),
         _ => unreachable!(
             "semantic analyser missed unknown binary operator: {}",
             operator
@@ -172,6 +182,16 @@ pub fn evaluate_logical_or(left: Value, right: Value) -> Value {
             "type checker did not catch incorrect || operands: {:?} & {:?}",
             left, right
         ),
+    }
+}
+
+pub fn evaluate_walrus(left: &Expression, right: Value, environment: &mut Environment) -> Value {
+    match left {
+        Expression::Identifier(name) => {
+            environment.assign(name, right.clone());
+            right
+        }
+        _ => unreachable!("type checker did not catch non-identifier walrus operand"),
     }
 }
 

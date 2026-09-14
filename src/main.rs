@@ -249,11 +249,7 @@ fn evaluate_expression(expression: &Expression, environment: &mut Environment) -
             operator,
             right,
             inferred_type: _,
-        } => {
-            let left = evaluate_expression(left, environment);
-            let right = evaluate_expression(right, environment);
-            operations::evaluate_binary_operator(left, operator, right)
-        }
+        } => operations::evaluate_binary_operator(left, operator, right, environment),
         Expression::UnaryOp {
             operator,
             operand,
