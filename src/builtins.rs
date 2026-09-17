@@ -41,8 +41,8 @@ pub fn execute_builtin(function: &Function, arguments: Vec<Value>) -> Value {
             };
 
             match value {
-                Value::String(s) => Value::Number(parse_number(s, *target_type)),
-                Value::Number(n) => Value::Number(convert_number(n, *target_type)),
+                Value::String(s) => Value::Number(parse_number(s, target_type.clone())),
+                Value::Number(n) => Value::Number(convert_number(n, target_type.clone())),
                 _ => unreachable!("semantic analyser allowed invalid argument to to_num"),
             }
         }
