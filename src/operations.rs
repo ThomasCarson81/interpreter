@@ -1,6 +1,7 @@
 use crate::Environment;
 use syntax::{
-    ast::{Expression, TokenType},
+    ast::Expression,
+    tokens::TokenType,
     types::{Number, Value},
 };
 
