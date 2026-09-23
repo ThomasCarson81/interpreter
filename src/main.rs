@@ -235,6 +235,7 @@ fn execute_statement(statement: &Statement, environment: &mut Environment) -> Co
         Statement::Break => return ControlFlow::Break,
         Statement::Continue => return ControlFlow::Continue,
         Statement::Pass => (),
+        Statement::TypeDefinition(type_definition) => todo!(),
     }
 
     ControlFlow::Normal
